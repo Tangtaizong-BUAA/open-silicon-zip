@@ -12,7 +12,7 @@ Settings initially selected Simplified Chinese. Selecting English and restarting
 
 ## Downloadable preview artifacts
 
-`v0.2.0-preview.1` provides ARM64 DMG and ZIP packages for macOS 15+. The ZIP was extracted and the DMG mounted read-only; every application file hash, symlink and permission mode matched the staging bundle. Both nested ad-hoc signatures verified, and the engine extracted from the final ZIP passed all 24 synthetic security checks. The packaging pipeline removes builder home paths and does not include provisioning profiles.
+`v0.2.0-preview.2` provides ARM64 DMG and ZIP packages for macOS 15+. The ZIP was extracted and the DMG mounted read-only; every application file hash, symlink and permission mode matched the staging bundle. Both nested ad-hoc signatures verified, and the engine extracted from the final ZIP passed all 24 synthetic security checks. The packaging pipeline removes builder home paths and does not include provisioning profiles.
 
 These preview artifacts are **not notarized** and have no Developer ID distribution signature. Local `spctl --assess --type execute` rejects the ad-hoc package. This is separate from the development-signed installed-app Finder acceptance above; Finder extension activation on other Macs using the preview signature has not been verified.
 
@@ -27,7 +27,7 @@ The isolated update container is healthy, has no host port, and the pre-existing
 ## Automated checks
 
 - Swift: **71 tests passed**.
-- Rust: **187 reported passed**, with **1 explicitly ignored** large-file test. Counts include the fixture early returns described below.
+- Rust: **188 reported passed**, with **1 explicitly ignored** large-file test. Counts include the fixture early returns described below.
 - Synthetic security regressions: **24 passed**, including a real SIGTERM cancellation that preserved the existing archive and removed temporary output.
 - Independent compatibility matrix: **36 passed**, **0 failed**, **1 skipped** (macOS system unzip lacks support for the BZIP2 method; 7-Zip verifies that archive).
 - Localization: **492 source keys**, matching app/kit tables for English, Simplified Chinese and Traditional Chinese; placeholder validation passed.
@@ -45,6 +45,12 @@ Local synthetic attacks exercise traversal, symlink redirection, corrupt overwri
 The public branch begins with a sanitized source snapshot. Local baseline history, personal signing settings, local logs, generated apps and real user files are not published. The main app is not sandboxed; the Finder extension is. Local development signing passes nested signature verification, but is not Developer ID notarization or Gatekeeper distribution acceptance.
 
 ## Performance
+
+The preview.1 → preview.2 paired run uses five timed repetitions after one warmup per binary/case, with alternating order. All **70 timed round trips plus 14 warmups** passed full relative-path, length and SHA-256 validation. All seven cases preserve archive size; six also preserve archive bytes. Small 7z changes its default dictionary metadata. The [paired report](BENCHMARKS.md#preview2-优化前后) reports all cases and memory tradeoffs, including the effectively unchanged mixed-7z compression time. These are process-level latencies, not isolated codec throughput measurements.
+
+The final performance engine passed the Rust, 24-check security and 36-pass compatibility suites above. The compatibility runner now discovers either `7zz` or `7z`; an initial run without the latter executable failed its opener invocations, then passed using the installed official `7zz`.
+
+### Earlier baseline comparison
 
 For the additional same-machine comparison with Bandizip 365, 7-Zip, Info-ZIP and libarchive, see [Benchmark](BENCHMARKS.md). It includes default and high-speed-off modes, archive size, compression/extraction time, memory and all 30 validated round trips.
 

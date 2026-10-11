@@ -249,6 +249,7 @@ struct CdRec { hdr: Hdr, disk: u32, off: u64, descriptor: bool }
 
 thread_local! {
     static DEFL: RefCell<Option<(i32, libdeflater::Compressor)>> = const { RefCell::new(None) };
+    static STREAM_DEFL: RefCell<Option<(u32, flate2::Compress)>> = const { RefCell::new(None) };
     static ZSTDC: RefCell<Option<(i32, zstd::bulk::Compressor<'static>)>> = const { RefCell::new(None) };
 }
 
@@ -322,17 +323,26 @@ fn method_code(m: Method) -> u16 { match m { Method::Store => M_STORE, Method::D
 
 fn deflate_block(data: &[u8], level: u32) -> Vec<u8> {
     use flate2::{Compress, Compression, FlushCompress};
-    let mut c = Compress::new(Compression::new(level), false);
-    let mut out = Vec::with_capacity(data.len() / 2 + 4096);
-    let mut input = data;
-    loop {
-        let before = c.total_in();
-        if out.capacity() - out.len() < 64 { out.reserve(out.capacity() / 2 + 4096); }
-        c.compress_vec(input, &mut out, FlushCompress::Full).expect("deflate");
-        input = &input[(c.total_in() - before) as usize..];
-        if input.is_empty() && out.len() < out.capacity() { break; }
-    }
-    out
+    STREAM_DEFL.with(|state| {
+        let mut state = state.borrow_mut();
+        if state.as_ref().map(|(l, _)| *l) != Some(level) {
+            *state = Some((level, Compress::new(Compression::new(level), false)));
+        } else {
+            // Independent full-flush blocks must not retain a previous dictionary.
+            state.as_mut().unwrap().1.reset();
+        }
+        let c = &mut state.as_mut().unwrap().1;
+        let mut out = Vec::with_capacity(data.len() / 2 + 4096);
+        let mut input = data;
+        loop {
+            let before = c.total_in();
+            if out.capacity() - out.len() < 64 { out.reserve(out.capacity() / 2 + 4096); }
+            c.compress_vec(input, &mut out, FlushCompress::Full).expect("deflate");
+            input = &input[(c.total_in() - before) as usize..];
+            if input.is_empty() && out.len() < out.capacity() { break; }
+        }
+        out
+    })
 }
 
 // ---------------------------------------------------------------- encryption state
@@ -769,5 +779,24 @@ fn finalize(mut sink: Sink, cd: Vec<CdRec>, opts: &ZipOptions, mut stats: ZipSta
     match sink.finish() {
         Ok(v) => { stats.volumes = v; Ok(stats) }
         Err(e) => Err(e),
+    }
+}
+
+#[cfg(test)]
+mod codec_reuse_tests {
+    use super::*;
+
+    #[test]
+    fn reused_deflate_blocks_are_independent_across_inputs_and_levels() {
+        // Reuse on one thread, including level changes and incompressible input.
+        let noise: Vec<u8> = (0u32..8192).flat_map(|n| n.wrapping_mul(2654435761).to_le_bytes()).collect();
+        for (data, level) in [(b"repeat repeat repeat".as_slice(), 6), (noise.as_slice(), 6),
+                              (&[][..], 3), (noise.as_slice(), 3), (b"end".as_slice(), 9)] {
+            let mut compressed = deflate_block(data, level);
+            compressed.extend_from_slice(&[3, 0]);
+            let mut decoded = Vec::new();
+            flate2::read::DeflateDecoder::new(compressed.as_slice()).read_to_end(&mut decoded).unwrap();
+            assert_eq!(decoded, data);
+        }
     }
 }

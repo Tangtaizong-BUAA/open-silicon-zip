@@ -21,7 +21,8 @@ Both the appcast and the downloaded archive require Ed25519 verification. Archiv
    ```bash
    python3 scripts/make-appcast.py \
      release-artifacts/vVERSION/OpenSiliconZip-VERSION-macos-arm64.zip \
-     --version VERSION --appcast-tool /path/to/Sparkle/bin/generate_appcast \
+     --version VERSION --notes-file /path/to/release-summary.txt \
+     --appcast-tool /path/to/Sparkle/bin/generate_appcast \
      --output release-artifacts/vVERSION/appcast.xml
    ```
 

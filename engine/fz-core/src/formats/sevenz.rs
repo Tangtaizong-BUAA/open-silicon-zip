@@ -124,6 +124,15 @@ pub fn create_7z(out: &Path, entries: &[EntryDesc], o: &SevenOptions, cancel: &C
         // expose useful P-core parallelism; cap workers using estimated codec workspace.
         let requested = crate::sys::worker_count(o.threads);
         let source_bytes = entries.iter().map(|e| e.size).sum::<u64>();
+        // A default dictionary larger than the entire input cannot find more
+        // history. Keep explicit dictionaries intact and round up to a supported
+        // power of two, with the LZMA2 minimum of 4 KiB.
+        let default_dict = (source_bytes.min(dict_for(o.level) as u64).max(4096) as u32).next_power_of_two();
+        let effective_options = SevenOptions {
+            dict_size: if o.method == SzMethod::Lzma2 { Some(o.dict_size.unwrap_or(default_dict)) } else { o.dict_size },
+            ..o.clone()
+        };
+        let o = &effective_options;
         let block_limit = match o.solid {
             Solid::Auto => source_bytes.div_ceil(requested as u64).clamp(16 << 20, 64 << 20),
             Solid::None => 0, Solid::Single => u64::MAX, Solid::Bytes(b) => b,
@@ -341,7 +350,7 @@ pub fn extract_7z(path: &Path, o: &ExtractOptions, cancel: &CancelToken, progres
     let res: Result<()> = pool.install(|| {
         (0..blocks).into_par_iter().try_for_each(|bi| -> Result<()> {
             cancel.check()?;
-            let mut src = File::open(path)?;
+            let mut src = std::io::BufReader::with_capacity(256 << 10, File::open(path)?);
             let dec = sz::BlockDecoder::new(1, bi, &archive, &pw, &mut src);
             dec.for_each_entries(&mut |e: &sz::ArchiveEntry, r: &mut dyn Read| handle_entry(e.name(), r)).map(|_| ()).map_err(|e| if cancel.is_cancelled() { Error::new(ErrorKind::Cancelled, "cancelled") } else { sz_err(e) })
         })

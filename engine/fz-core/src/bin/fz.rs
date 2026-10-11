@@ -99,21 +99,25 @@ fn level(s: &str) -> Level { match s { "store" => Level::Store, "fast" => Level:
 
 /// Run `f` while a thread streams progress events (>= 5 Hz).
 fn with_progress<T>(out: &Out, p: &Progress, f: impl FnOnce() -> T) -> T {
+    // Text-mode commands have no periodic progress output to publish.
+    if !out.json { return f(); }
     let stop = Arc::new(AtomicBool::new(false));
     let json = out.json;
     let (p2, s2) = (p.clone(), stop.clone());
     let h = std::thread::spawn(move || {
-        while !s2.load(Ordering::Relaxed) {
+        while !s2.load(Ordering::Acquire) {
             if json {
                 let s = p2.snapshot();
                 println!("{}", json!({"event":"progress","phase":s.phase,"current":s.current,"bytes_read":s.bytes_read,"bytes_written":s.bytes_written,
                     "bytes_total":s.bytes_total,"files_done":s.files_done,"files_total":s.files_total}));
             }
-            std::thread::sleep(std::time::Duration::from_millis(150));
+            std::thread::park_timeout(std::time::Duration::from_millis(150));
         }
     });
     let r = f();
-    stop.store(true, Ordering::Relaxed);
+    stop.store(true, Ordering::Release);
+    // unpark retains a wake-up token if the worker has not parked yet.
+    h.thread().unpark();
     let _ = h.join();
     r
 }

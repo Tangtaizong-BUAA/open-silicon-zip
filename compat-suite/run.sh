@@ -5,6 +5,10 @@
 # consumes ./out/*.zip|7z|tar.* and ./out/manifest.txt on a Windows runner.
 set -euo pipefail
 FZ="$(realpath "${FZ:-$(dirname "$0")/../engine/fz-core/target/release/fz}")"
+SEVENZIP="${SEVENZIP:-$(command -v 7zz || command -v 7z || true)}"
+if [[ -z "$SEVENZIP" ]]; then
+  echo 'Install 7-Zip (7zz or 7z), or set SEVENZIP to its executable.' >&2; exit 1
+fi
 O="${1:-$(mktemp -d "${TMPDIR:-/tmp}/osz-compat.XXXXXX")}"
 if [[ -d "$O" && -n "$(ls -A "$O")" ]]; then
   echo "Refusing to overwrite a nonempty compatibility output directory: $O" >&2; exit 1
@@ -25,14 +29,14 @@ check() { if "${@:2}" >/dev/null 2>&1; then echo "PASS $1"; pass=$((pass+1)); el
 for lv in store fast normal max; do
   "$FZ" create zip-$lv.zip $c --level $lv >/dev/null
   check "zip-$lv unzip -t"  unzip -tq zip-$lv.zip
-  check "zip-$lv 7z t"      7z t zip-$lv.zip
+  check "zip-$lv 7z t"      "$SEVENZIP" t zip-$lv.zip
   check "zip-$lv fz test"   "$FZ" test zip-$lv.zip
 done
-"$FZ" create aes.zip $c --password pw >/dev/null;           check "zip-aes256 7z t" 7z t -ppw aes.zip
-"$FZ" create aes128.zip $c --password pw --crypto aes128 >/dev/null; check "zip-aes128 7z t" 7z t -ppw aes128.zip
+"$FZ" create aes.zip $c --password pw >/dev/null;           check "zip-aes256 7z t" "$SEVENZIP" t -ppw aes.zip
+"$FZ" create aes128.zip $c --password pw --crypto aes128 >/dev/null; check "zip-aes128 7z t" "$SEVENZIP" t -ppw aes128.zip
 "$FZ" create zc.zip $c --password pw --crypto zipcrypto >/dev/null; check "zip-zipcrypto unzip -t" unzip -P pw -tq zc.zip
-"$FZ" create span.zip $c --split 200KB >/dev/null;           check "zip-spanned 7z t" 7z t span.zip
-"$FZ" create bz.zip $c --method bzip2 >/dev/null;            check "zip-bzip2 7z t" 7z t bz.zip
+"$FZ" create span.zip $c --split 200KB >/dev/null;           check "zip-spanned 7z t" "$SEVENZIP" t span.zip
+"$FZ" create bz.zip $c --method bzip2 >/dev/null;            check "zip-bzip2 7z t" "$SEVENZIP" t bz.zip
 if unzip -tq bz.zip > bzip2-unzip.log 2>&1; then
   echo 'PASS zip-bzip2 unzip -t'; pass=$((pass+1))
 else
@@ -41,11 +45,11 @@ else
   else echo "FAIL zip-bzip2 unzip: exit $status"; fail=$((fail+1)); fi
 fi
 "$FZ" create x.zipx $c >/dev/null;                           check "zipx-zstd fz test" "$FZ" test x.zipx
-"$FZ" create n.7z $c >/dev/null;                             check "7z 7z t" 7z t n.7z
-"$FZ" create ns.7z $c --solid off >/dev/null;                check "7z-nonsolid 7z t" 7z t ns.7z
-"$FZ" create mx.7z $c --level max >/dev/null;                check "7z-max 7z t" 7z t mx.7z
-"$FZ" create he.7z $c --password pw --encrypt-names >/dev/null; check "7z-header-enc 7z t" 7z t -ppw he.7z
-"$FZ" create sp.7z $c --split 200KB >/dev/null;              check "7z-split 7z t" 7z t sp.7z.001
+"$FZ" create n.7z $c >/dev/null;                             check "7z 7z t" "$SEVENZIP" t n.7z
+"$FZ" create ns.7z $c --solid off >/dev/null;                check "7z-nonsolid 7z t" "$SEVENZIP" t ns.7z
+"$FZ" create mx.7z $c --level max >/dev/null;                check "7z-max 7z t" "$SEVENZIP" t mx.7z
+"$FZ" create he.7z $c --password pw --encrypt-names >/dev/null; check "7z-header-enc 7z t" "$SEVENZIP" t -ppw he.7z
+"$FZ" create sp.7z $c --split 200KB >/dev/null;              check "7z-split 7z t" "$SEVENZIP" t sp.7z.001
 "$FZ" create t.tar $c >/dev/null;   check "tar tar tf" tar tf t.tar
 "$FZ" create t.tgz $c >/dev/null;   check "tgz tar tzf" tar tzf t.tgz
 "$FZ" create t.tbz $c >/dev/null;   check "tbz tar tjf" tar tjf t.tbz
