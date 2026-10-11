@@ -77,7 +77,7 @@ with tempfile.TemporaryDirectory(prefix='osz-security-') as work:
         require(p.poll() is None and bool(list(w.glob('.osz-create-*'))),'cancellation reaches an active archive writer')
         p.send_signal(signal.SIGTERM)
         stdout,stderr=p.communicate(timeout=15)
-        require(p.returncode==130,'SIGTERM becomes cooperative engine cancellation')
+        require(p.returncode==130, f'SIGTERM becomes cooperative engine cancellation (exit={p.returncode}, stdout={stdout[-2000:]!r}, stderr={stderr[-2000:]!r})')
         require(dest.read_bytes()==b'ORIGINAL ARCHIVE' and not list(w.glob('.osz-create-*')),'cancel preserves previous archive and removes temporary output')
     finally:
         if p.poll() is None: p.kill();p.communicate()
