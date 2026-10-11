@@ -4,7 +4,7 @@ The MIT license covers original Open Silicon Zip code only. Dependency licenses 
 
 ## Vendored 7z engine
 
-`engine/vendor/sevenz-rust2` is a local fork of sevenz-rust2 0.23.0 (Apache-2.0). The modifications add the optional liblzma LZMA2 encoder and raw encoder integration. Its LICENSE is retained beside the source.
+`engine/vendor/sevenz-rust2` is a local fork of sevenz-rust2 0.23.0 (Apache-2.0). The modifications add the optional liblzma LZMA2 encoder, parallel prepared-block integration, bounded metadata allocation checks and larger buffered copy operations. Its LICENSE is retained beside the source.
 
 ## RAR support
 

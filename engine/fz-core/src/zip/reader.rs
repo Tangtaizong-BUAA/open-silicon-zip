@@ -384,7 +384,10 @@ impl ZipArchive {
     }
 
     fn decode_stream<R: Read>(&self, e: &ZipEntry, src: R, out: &mut dyn io::Write, check_crc: bool) -> Result<u64> {
-        let mut limited = src.take(e.csize);
+        // Byte-oriented codecs (notably PPMd) must not issue a pread per byte.
+        // Buffer the bounded, decrypted payload; AES still drains/authenticates
+        // its own bounded ciphertext reader afterwards.
+        let mut limited = io::BufReader::with_capacity(256 << 10, src.take(e.csize));
         let mut dec: Box<dyn Read + '_> = match e.method {
             M_PPMD => {
                 // 2-byte params: order-1 (bits 0-3), memory MB-1 (bits 4-11), restore method (bits 12-15)

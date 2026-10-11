@@ -4,6 +4,8 @@ Validation is performed against a native ARM64 build on macOS 15.7.1, Apple M4 M
 
 ## Finder and language acceptance
 
+Build 5 was installed locally from the verified preview.3 staging bundle. A cold Finder primary-menu 7z action on a 32 MiB Chinese-named file visibly showed only a compact progress dialog. Its archive passed independent 7-Zip extraction and full SHA-256 comparison. The primary extraction action on a second fixture created a separate numbered directory and preserved every source byte. Opening the app explicitly still displayed the dashboard. Startup no longer synchronously reads or writes the Finder sandbox container on the main thread; LaunchServices delivers current Finder requests as URL events.
+
 Finder primary-menu actions were exercised on synthetic Chinese-named files. The generic compression action displayed a compact ZIP/7z selector with the source parent as destination; browsing to another folder produced a valid 7z there. Direct compression used a compact progress panel. The latest build also suppresses automatic dashboard/Jobs restoration and hides these windows on incoming Finder compression/extraction requests.
 
 After the real Sparkle update to build 3, a warm-launch generic compression click displayed the compact selector and created a valid ZIP. Direct 7z produced a valid archive after the app had been quit. The primary extraction action created a fresh `进度验证.txt (3)` directory without merging into existing output; its extracted 32 MiB file matched SHA-256 `4ac87b5b0e6c5b3526afc67d635f55e7d864308313eec081f2b801c219387653`. Explicit “Extract Here” remains available for intentionally extracting without a wrapper. Reopening the app itself still opens its dashboard; app-selection UI automation can trigger this reopen, so that observation is distinct from the Finder action.
@@ -12,22 +14,24 @@ Settings initially selected Simplified Chinese. Selecting English and restarting
 
 ## Downloadable preview artifacts
 
-`v0.2.0-preview.2` provides ARM64 DMG and ZIP packages for macOS 15+. The ZIP was extracted and the DMG mounted read-only; every application file hash, symlink and permission mode matched the staging bundle. Both nested ad-hoc signatures verified, and the engine extracted from the final ZIP passed all 24 synthetic security checks. The packaging pipeline removes builder home paths and does not include provisioning profiles.
+`v0.2.0-preview.3` provides ARM64 DMG and ZIP packages for macOS 15+. The ZIP was extracted and the DMG mounted read-only; every application file hash, symlink and permission mode matched the staging bundle. Both nested ad-hoc signatures verified, and the engine extracted from the final ZIP passed all 24 synthetic security checks. The packaging pipeline removes builder home paths and does not include provisioning profiles.
 
-These preview artifacts are **not notarized** and have no Developer ID distribution signature. Local `spctl --assess --type execute` rejects the ad-hoc package. This is separate from the development-signed installed-app Finder acceptance above; Finder extension activation on other Macs using the preview signature has not been verified.
+These preview artifacts are **not notarized** and have no Developer ID distribution signature. Local `spctl --assess --type execute` rejects the ad-hoc package. Build 5 was exercised locally with this ad-hoc package in an existing extension setup; activation on a fresh Mac has not been verified. Earlier build 3 acceptance used a development-signed setup.
 
 ## Automatic update acceptance
 
 The home-server HTTPS feed and immutable ZIP were downloaded back and independently verified using the embedded Ed25519 public key. Deliberately modified feed/archive bytes were rejected. Publishing uses Sparkle's official `generate_appcast` with a local mode-0600 key file and does not access Keychain; the key is outside the repository and is not deployed to the server.
 
-An installed build 2 actually checked the public feed, downloaded build 3, verified it, installed it and relaunched. Its app executable, engine and Info.plist matched the release staging bundle byte-for-byte, and nested code-signature verification passed. Background notification delivery depends on macOS notification permission; a four-hour polling interval and busy-job deferral are implemented, but a full four-hour idle-cycle and a busy-install deferral were not separately timed in this acceptance run. Notifications are polling-based, not APNs server push.
+In the earlier update acceptance, an installed build 2 actually checked the public feed, downloaded build 3, verified it, installed it and relaunched. Its app executable, engine and Info.plist matched the release staging bundle byte-for-byte, and nested code-signature verification passed. Background notification delivery depends on macOS notification permission; a four-hour polling interval and busy-job deferral are implemented, but a full four-hour idle-cycle and a busy-install deferral were not separately timed in this acceptance run. Notifications are polling-based, not APNs server push.
+
+Build 5 was installed manually from the verified final bundle during this run; the older live build 2 → 3 Sparkle cycle above is not evidence of a separately exercised build 3 → 5 automatic installation.
 
 The isolated update container is healthy, has no host port, and the pre-existing home-server containers retained their IDs/start times across deployment. This proves the checked deployment isolation, not immunity to compromise.
 
 ## Automated checks
 
 - Swift: **71 tests passed**.
-- Rust: **188 reported passed**, with **1 explicitly ignored** large-file test. Counts include the fixture early returns described below.
+- Rust: **190 reported passed**, with **1 explicitly ignored** large-file test. Counts include the fixture early returns described below.
 - Synthetic security regressions: **24 passed**, including a real SIGTERM cancellation that preserved the existing archive and removed temporary output.
 - Independent compatibility matrix: **36 passed**, **0 failed**, **1 skipped** (macOS system unzip lacks support for the BZIP2 method; 7-Zip verifies that archive).
 - Localization: **492 source keys**, matching app/kit tables for English, Simplified Chinese and Traditional Chinese; placeholder validation passed.
@@ -46,9 +50,15 @@ The public branch begins with a sanitized source snapshot. Local baseline histor
 
 ## Performance
 
+The preview.2 → preview.3 paired run covers eight workloads with five timed repetitions after one warmup per binary/case. All **80 timed round trips, 80 identical-reference-archive extractions, 16 warmup round trips and 16 warmup reference extractions** passed full path, length and SHA-256 checks. The [round-three report](BENCHMARKS.md#preview3-优化前后) includes all cases, output sizes, maximum RSS, slower cases and the small-file compression-ratio tradeoff. Mixed 7z creation is 2.14× faster; ZIP PPMd same-archive extraction is 3.89× faster. A 256 MiB single COPY stream uses 8.3 MiB peak RSS versus 413.7 MiB. These are CLI release engines, not GUI latency or a fresh competitor ranking.
+
+The new integration cases validate mixed stored/compressed block planning, preserved explicit solid and dictionary settings, and a stored stream crossing multiple copy buffers. The Rust run had the installed official 7-Zip exposed as `7z`, so the existing 7-Zip interoperability fixtures actually executed. ZIP PPMd, including encrypted paths, remains covered by existing round-trip and authentication tests.
+
+### Previous release comparison
+
 The preview.1 → preview.2 paired run uses five timed repetitions after one warmup per binary/case, with alternating order. All **70 timed round trips plus 14 warmups** passed full relative-path, length and SHA-256 validation. All seven cases preserve archive size; six also preserve archive bytes. Small 7z changes its default dictionary metadata. The [paired report](BENCHMARKS.md#preview2-优化前后) reports all cases and memory tradeoffs, including the effectively unchanged mixed-7z compression time. These are process-level latencies, not isolated codec throughput measurements.
 
-The final performance engine passed the Rust, 24-check security and 36-pass compatibility suites above. The compatibility runner now discovers either `7zz` or `7z`; an initial run without the latter executable failed its opener invocations, then passed using the installed official `7zz`.
+Both the final release engine and its packaged copy passed the 24-check security suite; the release engine also passed the Rust and 36-pass compatibility suites above. The compatibility runner now discovers either `7zz` or `7z`; an initial run without the latter executable failed its opener invocations, then passed using the installed official `7zz`.
 
 ### Earlier baseline comparison
 

@@ -15,7 +15,7 @@ struct FastZipApp: App {
                 .environmentObject(model)
         }
         .handlesExternalEvents(matching: Set<String>())
-        .defaultLaunchBehavior(FinderLaunch.isQuickLaunch ? .suppressed : .automatic)
+        .defaultLaunchBehavior(.suppressed)
         .restorationBehavior(.disabled)
         .commands { AppCommands(model: model) }
 
@@ -142,7 +142,8 @@ struct AppCommands: Commands {
     }
 }
 
-/// Capture the launch intent before the inbox consumer can drain it.
+/// Finder passes explicit launch intent; never synchronously inspect another
+/// sandbox's directory while SwiftUI is constructing its first scene.
 enum FinderLaunch {
-    static let isQuickLaunch = ProcessInfo.processInfo.arguments.contains("--finder-action") || JobInbox.hasPendingRequests
+    static let isQuickLaunch = ProcessInfo.processInfo.arguments.contains("--finder-action")
 }

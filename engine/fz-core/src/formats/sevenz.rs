@@ -1,6 +1,6 @@
 //! 7z create/list/extract on top of sevenz-rust2, parallel at block level.
 //! Solid blocks are compressed concurrently (`prepare_block`) and appended in order; a single
-//! large block uses multithreaded LZMA2 chunks instead.
+//! large block keeps one stream (the native liblzma backend encodes it on one worker).
 use super::common::{apply_meta, plan_targets, resolve_conflict};
 use crate::cancel::{CancelToken, Progress};
 use crate::enumerate::{EntryDesc, EntryKind};
@@ -120,33 +120,8 @@ pub fn create_7z(out: &Path, entries: &[EntryDesc], o: &SevenOptions, cancel: &C
     let parent = out.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
     let part = tempfile::Builder::new().prefix(".osz-create-").tempfile_in(parent)?.into_temp_path();
     let r = (|| -> Result<u64> {
-        // liblzma encodes each solid block on one worker. Size automatic blocks to
-        // expose useful P-core parallelism; cap workers using estimated codec workspace.
-        let requested = crate::sys::worker_count(o.threads);
-        let source_bytes = entries.iter().map(|e| e.size).sum::<u64>();
-        // A default dictionary larger than the entire input cannot find more
-        // history. Keep explicit dictionaries intact and round up to a supported
-        // power of two, with the LZMA2 minimum of 4 KiB.
-        let default_dict = (source_bytes.min(dict_for(o.level) as u64).max(4096) as u32).next_power_of_two();
-        let effective_options = SevenOptions {
-            dict_size: if o.method == SzMethod::Lzma2 { Some(o.dict_size.unwrap_or(default_dict)) } else { o.dict_size },
-            ..o.clone()
-        };
-        let o = &effective_options;
-        let block_limit = match o.solid {
-            Solid::Auto => source_bytes.div_ceil(requested as u64).clamp(16 << 20, 64 << 20),
-            Solid::None => 0, Solid::Single => u64::MAX, Solid::Bytes(b) => b,
-        };
-        let dictionary = o.dict_size.unwrap_or(dict_for(o.level)) as u64;
-        let workspace = dictionary.saturating_mul(12).saturating_add(32 << 20)
-            .saturating_add(block_limit.min(source_bytes).saturating_mul(2));
-        let memory_workers = (o.memory_budget / workspace.max(1)).max(1) as usize;
-        let threads = requested.min(memory_workers);
-        let pool = crate::sys::build_pool(threads);
-        let mut w = sz::ArchiveWriter::new(File::create(&part)?).map_err(sz_err)?;
-        w.set_encrypt_header(o.encrypt_names && o.password.is_some());
-
-        // partition: dirs/empty files, stored (skip-list), compressible
+        // Partition before sizing solid blocks: stored media must not inflate the
+        // target size of the text/data blocks that actually use codec workers.
         let mut empties = Vec::new();
         let mut stored: Vec<&EntryDesc> = Vec::new();
         let mut comp: Vec<&EntryDesc> = Vec::new();
@@ -158,17 +133,45 @@ pub fn create_7z(out: &Path, entries: &[EntryDesc], o: &SevenOptions, cancel: &C
                 _ => comp.push(d),
             }
         }
+        // liblzma encodes each solid block on one worker; keep all user-selected
+        // solid sizes intact and bound automatic concurrency by codec workspace.
+        let requested = crate::sys::worker_count(o.threads);
+        let source_bytes = entries.iter().map(|e| e.size).sum::<u64>();
+        let compressible_bytes = comp.iter().map(|e| e.size).sum::<u64>();
+        let block_limit = match o.solid {
+            Solid::Auto => compressible_bytes.div_ceil(requested as u64).clamp(8 << 20, 64 << 20),
+            Solid::None => 0, Solid::Single => u64::MAX, Solid::Bytes(b) => b,
+        };
+        // No dictionary can use history beyond its block. A file may exceed the
+        // block target, so retain enough dictionary for the largest individual file.
+        let largest_file = comp.iter().map(|e| e.size).max().unwrap_or(0);
+        let dictionary_input = compressible_bytes.min(block_limit.max(largest_file));
+        let default_dict = (dictionary_input.min(dict_for(o.level) as u64).max(4096) as u32).next_power_of_two();
+        let effective_options = SevenOptions {
+            dict_size: if o.method == SzMethod::Lzma2 { Some(o.dict_size.unwrap_or(default_dict)) } else { o.dict_size },
+            ..o.clone()
+        };
+        let o = &effective_options;
+        let dictionary = o.dict_size.unwrap_or(dict_for(o.level)) as u64;
+        let workspace = dictionary.saturating_mul(12).saturating_add(32 << 20)
+            .saturating_add(block_limit.min(source_bytes).saturating_mul(2));
+        let memory_workers = (o.memory_budget / workspace.max(1)).max(1) as usize;
+        let threads = requested.min(memory_workers);
+        let pool = crate::sys::build_pool(threads);
+        let mut w = sz::ArchiveWriter::new(File::create(&part)?).map_err(sz_err)?;
+        w.set_encrypt_header(o.encrypt_names && o.password.is_some());
+
         for d in empties {
             let mut e = entry_for(d);
             if d.kind == EntryKind::File { e.has_stream = false; e.is_directory = false; }
             w.push_archive_entry::<&[u8]>(e, None).map_err(sz_err)?;
         }
-        let group = |list: &[&EntryDesc]| -> Vec<Vec<usize>> {
+        let group = |list: &[&EntryDesc], limit: u64| -> Vec<Vec<usize>> {
             let mut g: Vec<Vec<usize>> = Vec::new();
             let mut cur: Vec<usize> = Vec::new();
             let mut sum = 0u64;
             for (i, d) in list.iter().enumerate() {
-                if !cur.is_empty() && (block_limit == 0 || sum + d.size > block_limit) { g.push(std::mem::take(&mut cur)); sum = 0; }
+                if !cur.is_empty() && (limit == 0 || sum + d.size > limit) { g.push(std::mem::take(&mut cur)); sum = 0; }
                 cur.push(i); sum += d.size;
             }
             if !cur.is_empty() { g.push(cur); }
@@ -178,9 +181,14 @@ pub fn create_7z(out: &Path, entries: &[EntryDesc], o: &SevenOptions, cancel: &C
         let wrap_err = |e: sz::Error| if cancel.is_cancelled() { Error::new(ErrorKind::Cancelled, "cancelled") } else { sz_err(e) };
 
         for (list, is_store) in [(&stored, true), (&comp, false)] {
-            let groups = group(list);
+            // Copy blocks do not need finer codec scheduling; preserve their layout.
+            let limit = if is_store && o.solid == Solid::Auto {
+                source_bytes.div_ceil(requested as u64).clamp(16 << 20, 64 << 20)
+            } else { block_limit };
+            let groups = group(list, limit);
             if groups.is_empty() { continue; }
-            // parallel across blocks when there are enough; otherwise one MT-LZMA2 stream per block
+            // Parallelize independent blocks. The native liblzma backend keeps
+            // a single block sequential, even when the options request multiple threads.
             let across = groups.len() >= 2 && threads > 1;
             let m = if is_store {
                 Arc::new(methods(&SevenOptions { level: Level::Store, ..o.clone() }, 1, 0))
@@ -189,7 +197,7 @@ pub fn create_7z(out: &Path, entries: &[EntryDesc], o: &SevenOptions, cancel: &C
             } else {
                 Arc::new(methods(o, threads as u32, (dict_for(o.level) as u64).max(4 << 20)))
             };
-            if across || is_store {
+            if across {
                 let wave = threads.max(1);
                 for chunk in groups.chunks(wave) {
                     cancel.check()?;
@@ -316,7 +324,7 @@ pub fn extract_7z(path: &Path, o: &ExtractOptions, cancel: &CancelToken, progres
     let stats = std::sync::Mutex::new((0u64, 0u64, 0u64, Vec::<(String, String)>::new(), Vec::<PathBuf>::new()));
     let blocks = archive.blocks.len();
     let pool = crate::sys::build_pool(o.threads);
-    let handle_entry = |name: &str, rd: &mut dyn Read| -> std::result::Result<bool, sz::Error> {
+    let handle_entry = |name: &str, rd: &mut dyn Read, buf: &mut [u8]| -> std::result::Result<bool, sz::Error> {
         if cancel.is_cancelled() { return Err(sz::Error::Other(std::borrow::Cow::Borrowed("cancelled"))); }
         let Some(&idx) = by_name.get(name) else { return Ok(true) };
         let Some(t) = &targets[idx] else { return Ok(true) };
@@ -328,12 +336,11 @@ pub fn extract_7z(path: &Path, o: &ExtractOptions, cancel: &CancelToken, progres
         let temporary = tempfile::NamedTempFile::new_in(p.parent().unwrap_or(Path::new(".")))
             .map_err(|e| sz::Error::Io(e, "create".into()))?;
         let f = temporary.as_file();
-        let mut w = std::io::BufWriter::with_capacity(1 << 20, f);
-        let mut buf = vec![0u8; 256 << 10];
+        let mut w = std::io::BufWriter::with_capacity((archive.files[idx].size() as usize).clamp(8192, 256 << 10), f);
         let mut n = 0u64;
         loop {
             if cancel.is_cancelled() { return Err(sz::Error::Other(std::borrow::Cow::Borrowed("cancelled"))); }
-            let k = rd.read(&mut buf).map_err(|e| sz::Error::Io(e, "read".into()))?;
+            let k = rd.read(buf).map_err(|e| sz::Error::Io(e, "read".into()))?;
             if k == 0 { break; }
             w.write_all(&buf[..k]).map_err(|e| sz::Error::Io(e, "write".into()))?;
             n += k as u64;
@@ -351,8 +358,9 @@ pub fn extract_7z(path: &Path, o: &ExtractOptions, cancel: &CancelToken, progres
         (0..blocks).into_par_iter().try_for_each(|bi| -> Result<()> {
             cancel.check()?;
             let mut src = std::io::BufReader::with_capacity(256 << 10, File::open(path)?);
+            let mut buf = vec![0u8; 256 << 10];
             let dec = sz::BlockDecoder::new(1, bi, &archive, &pw, &mut src);
-            dec.for_each_entries(&mut |e: &sz::ArchiveEntry, r: &mut dyn Read| handle_entry(e.name(), r)).map(|_| ()).map_err(|e| if cancel.is_cancelled() { Error::new(ErrorKind::Cancelled, "cancelled") } else { sz_err(e) })
+            dec.for_each_entries(&mut |e: &sz::ArchiveEntry, r: &mut dyn Read| handle_entry(e.name(), r, &mut buf)).map(|_| ()).map_err(|e| if cancel.is_cancelled() { Error::new(ErrorKind::Cancelled, "cancelled") } else { sz_err(e) })
         })
     });
     if let Err(e) = res {

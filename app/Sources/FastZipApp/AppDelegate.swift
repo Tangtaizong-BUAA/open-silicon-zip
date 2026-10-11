@@ -12,7 +12,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     func applicationDidFinishLaunching(_ notification: Notification) {
         // FR-506: Services menu entries (see scripts/App-Info.plist).
         MainActor.assumeIsolated {
-            _ = AppModel.shared
+            let model = AppModel.shared
+            // AppKit distinguishes a normal icon launch from URL/file/service
+            // launches without reading a protected container or guessing timing.
+            if notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool == true,
+               !FinderLaunch.isQuickLaunch {
+                model.requestDashboard()
+            }
             UpdateController.shared.start()
         }
         NSApp.servicesProvider = ServicesProvider.shared
@@ -42,9 +48,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         MainActor.assumeIsolated {
             let model = AppModel.shared
-            // The inbox consumer may already have drained the posted request.
-            guard !JobInbox.hasPendingRequests, Date().timeIntervalSince(model.lastExternalRequest) > 2 else { return false }
-            model.openDashboardWindow?()
+            // Finder uses URL-open events instead of reopen events. Reopen is
+            // the user's explicit request to see the dashboard, without disk I/O.
+            guard Date().timeIntervalSince(model.lastExternalRequest) > 2 else { return false }
+            model.requestDashboard()
             return false
         }
     }

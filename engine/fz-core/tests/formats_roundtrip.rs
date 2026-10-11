@@ -160,6 +160,49 @@ fn sz_opts(method: SzMethod, solid: Solid, level: Level) -> SevenOptions {
     SevenOptions { method, solid, level, ..Default::default() }
 }
 
+#[test]
+fn sevenz_auto_blocks_roundtrip_with_stored_media_and_explicit_solid() {
+    let t = TempDir::new().unwrap();
+    let src = t.path().join("mixed");
+    write(&src.join("a.txt"), &text(8 << 20));
+    write(&src.join("b.txt"), &text(8 << 20));
+    write(&src.join("media.mp4"), &noise(1 << 20, 93));
+    let entries = entries_of(&[src.clone()]);
+    for solid in [Solid::Auto, Solid::Single, Solid::Bytes(16 << 20)] {
+        let out = t.path().join(format!("{solid:?}.7z"));
+        let options = SevenOptions { solid, threads: 4, ..Default::default() };
+        create_7z(&out, &entries, &options, &cancel(), &progress()).unwrap();
+        let archive = formats::sevenz::open_archive(&out, None).unwrap();
+        let compressed: Vec<_> = archive.blocks.iter().filter(|b| b.get_unpack_size() > (1 << 20)).collect();
+        if solid == Solid::Auto { assert!(compressed.len() > 1); }
+        else { assert_eq!(compressed.len(), 1, "explicit solid layout changed"); }
+        let dest = t.path().join(format!("out-{solid:?}"));
+        formats::extract(&out, &ExtractOptions { smart: false, ..ExtractOptions::new(&dest) }, None, &cancel(), &progress()).unwrap();
+        assert_same_tree(&src, &dest.join("mixed"), false, false);
+    }
+    let explicit = t.path().join("explicit-dictionary.7z");
+    create_7z(&explicit, &entries, &SevenOptions { threads: 4, dict_size: Some(16 << 20), ..Default::default() }, &cancel(), &progress()).unwrap();
+    let archive = formats::sevenz::open_archive(&explicit, None).unwrap();
+    for coder in archive.blocks.iter().flat_map(|b| &b.coders).filter(|c| c.encoder_method_id() == [0x21]) {
+        // Standard LZMA2 property 24 denotes a 16 MiB dictionary.
+        assert_eq!(coder.properties(), &[24], "explicit dictionary was reduced");
+    }
+}
+
+#[test]
+fn sevenz_single_stored_stream_crosses_copy_buffers() {
+    let t = TempDir::new().unwrap();
+    let src = t.path().join("media.mp4");
+    let expected = noise((3 << 20) + 17, 14);
+    write(&src, &expected);
+    let out = t.path().join("media.7z");
+    create_7z(&out, &entries_of(&[src]), &SevenOptions::default(), &cancel(), &progress()).unwrap();
+    let dest = t.path().join("out");
+    let report = formats::extract(&out, &ExtractOptions { smart: false, ..ExtractOptions::new(&dest) }, None, &cancel(), &progress()).unwrap();
+    assert_eq!(report.bytes, expected.len() as u64);
+    assert_eq!(fs::read(dest.join("media.mp4")).unwrap(), expected);
+}
+
 // ------------------------------------------------------- 1. TAR family
 
 #[test]

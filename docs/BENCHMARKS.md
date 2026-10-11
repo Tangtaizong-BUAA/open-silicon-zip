@@ -3,6 +3,66 @@
 本页记录 2026-10-11 在 Apple M4 Max（12P + 4E，48 GiB，macOS 15.7.1）上的本机测量。
 所有输入均由固定随机种子生成，不包含个人文件。数据与脚本一并公开；不分发 Bandizip 或其他软件的二进制。
 
+## preview.3 优化前后
+
+同机比较 `v0.2.0-preview.2`（提交 `922cb5c`）与 `v0.2.0-preview.3` 的 ARM64 release 引擎。八项各预热一次，再交替执行五轮；**80 次计时往返 + 80 次读取同一基准压缩包的解压全部通过路径、长度与 SHA-256 校验**，另有 16 次预热往返及 16 次预热基准包解压。校验时间不计入计时。
+
+![preview.2 与 preview.3：每项最低实测值加粗标绿，包含时间、体积和内存](benchmarks/performance-round3.svg)
+
+[高清 PNG](benchmarks/performance-round3.png) · [原始样本 JSON](benchmarks/performance-round3.json) · [复现脚本](../bench/throughput.py) · [图表脚本](../bench/render-throughput.py)
+
+### 耗时
+
+单位 ms；耗时取五轮中位数，**粗体 = 同项最低显示值**，并不表示差异具有统计显著性。“各自产物”读取各版本生成的包；“同一包”让两版读取同一个旧版压缩包，从而区分分块布局与读取路径的影响。
+
+| 工作负载 | 旧压缩 ↓ | 新压缩 ↓ | 旧解压各自产物 ↓ | 新解压各自产物 ↓ | 旧解压同一包 ↓ | 新解压同一包 ↓ |
+|---|---:|---:|---:|---:|---:|---:|
+| ZIP · 128 MiB 混合 | **147.1** | 160.9 | 87.8 | **85.5** | 86.6 | **83.0** |
+| ZIP · 64 MiB 单文件 | 103.8 | **89.6** | 69.5 | **68.5** | **90.7** | 92.8 |
+| ZIP PPMd · 2 MiB | 50.4 | **48.9** | 167.3 | **43.7** | 168.3 | **43.3** |
+| 7z · 128 MiB 混合 | 9890.3 | **4625.6** | 212.7 | **130.1** | **204.5** | 210.8 |
+| 7z · 128 MiB · 高速关闭 | **6664.3** | 6863.6 | **134.1** | 146.9 | **125.9** | 133.2 |
+| 7z · 64 MiB 单文件 | 12012.0 | **11955.8** | **39.6** | 41.3 | **58.2** | 59.6 |
+| 7z COPY · 256 MiB | 1062.5 | **941.6** | **587.2** | 618.1 | **629.5** | 812.8 |
+| 7z · 2048 个小文件 | 600.7 | **308.4** | 332.5 | **210.1** | 334.5 | **323.8** |
+
+- 默认混合 7z 压缩 **9.890 → 4.626 秒，2.14×**；各自产物解压 **212.7 → 130.1 ms**。同一个旧包 **204.5 → 210.8 ms**，没有显示解码吞吐改善；各自产物的改善主要与更多可并行块有关。
+- ZIP PPMd 对同一个旧包解压 **168.3 → 43.3 ms，3.89×**；各自产物约 **3.83×**。有界输入缓冲避免了字节级读取反复进入底层 I/O，输出大小不变。
+- 2048 个小文件 7z 压缩 **600.7 → 308.4 ms，1.95×**，各自产物解压 **332.5 → 210.1 ms**。输出从 **16,422 增至 18,793 bytes（+14.44%，增加 2,371 bytes）**，压缩 RSS 也增加；更多块会减少跨文件重复利用。
+- 单个 256 MiB COPY 文件改为流式写入，压缩 **1.063 → 0.942 秒**，最大峰值 RSS **413.7 → 8.3 MiB（下降约 98%）**。COPY 是直接存储，不是视频编码；该项同一包解压从 **629.5 增至 812.8 ms**，没有声称磁盘读写一律更快。
+- 混合 ZIP 压缩 **147.1 → 160.9 ms**；关闭高速模式的混合 7z 压缩 **6.664 → 6.864 秒**、各自产物解压 **134.1 → 146.9 ms**。这些退步值保留在结果中。单个大 7z 压缩约 **12.0 秒**，基本不变；单一 solid 流仍由一个编码工作线程处理。
+
+### 大小与内存
+
+箭头表示旧版 → 新版。内存单位 MiB，取五轮中最大的进程峰值 RSS；“同一包”内存与图中的各自产物内存分别列出。
+
+| 工作负载 | 压缩包 bytes | 压缩 RSS | 解压各自产物 RSS | 解压同一包 RSS |
+|---|---:|---:|---:|---:|
+| ZIP · 128 MiB 混合 | 84,952,303 → 84,952,303 | 167.3 → 161.4 | 72.3 → 71.2 | 75.1 → 73.7 |
+| ZIP · 64 MiB 单文件 | 18,491,342 → 18,491,342 | 49.4 → 49.3 | 86.7 → 86.8 | 86.8 → 86.6 |
+| ZIP PPMd · 2 MiB | 409,794 → 409,794 | 10.2 → 10.1 | 8.2 → 8.6 | 8.2 → 8.5 |
+| 7z · 128 MiB 混合 | 82,453,332 → 82,513,610 | 714.8 → 706.0 | 105.3 → 76.0 | 102.3 → 73.2 |
+| 7z · 128 MiB · 高速关闭 | 53,638,303 → 53,641,453 | 1480.5 → 1560.7 | 171.6 → 205.9 | 172.6 → 138.5 |
+| 7z · 64 MiB 单文件 | 257,969 → 257,969 | 162.9 → 163.3 | 22.5 → 21.7 | 22.5 → 21.5 |
+| 7z COPY · 256 MiB | 268,435,665 → 268,435,665 | 413.7 → 8.3 | 6.3 → 5.3 | 6.3 → 5.5 |
+| 7z · 2048 个小文件 | 16,422 → 18,793 | 156.2 → 177.7 | 25.3 → 23.8 | 25.2 → 23.4 |
+
+默认混合 7z 包增大 **0.0731%**，关闭高速模式时增大 **0.0059%**。后者压缩 RSS 从 1480.5 增至 1560.7 MiB，各自产物解压 RSS 从 171.6 增至 205.9 MiB。速度、压缩率与内存必须一起看；没有跨场景总分。
+
+### 输入与计时边界
+
+混合数据沿用下方固定种子 714 的 128 MiB 语料。单文件数据为种子 719 的 1 MiB 词块重复 64 次，PPMd 为重复两次；2048 个小文件各为同一词块的前 8 KiB，共 16 MiB。COPY 样本为一个 1 MiB 随机块重复 256 次并命名为 `.mp4`，由默认扩展名策略直接存储，它不是实际视频。输入哈希、二进制哈希、每轮原始样本与基准包哈希均在 JSON 中。
+
+除 PPMd 与“高速关闭”的显式参数外均为默认 normal、自动线程、自动 solid。此次自动压缩块按可压缩数据量分配，最小目标从 16 MiB 降为 8 MiB；显式 solid / 字典设置保持不变。7z 输入写入使用 256 KiB 缓冲，解压缓冲按块复用；ZIP 解码增加受压缩大小限制的缓冲，保留密码认证和 CRC 路径。
+
+计时包含 CLI 启动、JSON 进度、读写与收尾，不含 SwiftUI、Finder、生成输入或内容校验。两版都在同机使用系统缓存，未清空缓存或锁定热状态；没有同时运行本项目的构建、其他测试或压缩任务。磁盘空间较紧张，运行中约 1.3 GiB 可用；COPY 结果明显受 I/O 状态影响。五轮小规模合成测量不代表所有 Apple 芯片、真实素材、低电量或冷盘性能。本轮没有重新计时竞品。
+
+```sh
+python3 bench/throughput.py /path/to/preview2/fz /path/to/preview3/fz \
+  --repetitions 5 --output performance-round3.json
+python3 bench/render-throughput.py --input performance-round3.json
+```
+
 ## preview.2 优化前后
 
 同机比较 `v0.2.0-preview.1`（提交 `1b378e6`）与 `v0.2.0-preview.2` 的 ARM64 release 引擎：每项先预热，再交替执行五轮，报告中位数；**70 次计时往返全部通过逐文件路径、长度与 SHA-256 校验**，另有 14 次预热往返校验。没有同时运行其他构建或测试；没有锁定机器热状态或清空缓存。
@@ -131,4 +191,4 @@ python3 bench/competitors.py --cases osz-7z-full,7zip-7z,bandizip-7z --output se
 
 ## English notes
 
-This is a three-repeat, warm-cache synthetic benchmark, not a universal ranking. Compression time, extraction time, output size and memory must be read together. Each extractor reads its own producer's archive. Defaults differ across codecs, thread counts and solid-block layouts. Bandizip runs through its documented macOS command interface and includes full app initialization; other rows measure CLI engines. Open Silicon Zip's default extension-based store policy is shown separately from high-speed-off mode. All extracted files are checked byte-for-byte via SHA-256, and every archive is tested with 7-Zip.
+The historical competitor comparison uses three warm-cache repetitions; the preview.2 to preview.3 paired comparison uses five and additionally tests the identical reference archive. These synthetic tests are not universal rankings. Compression time, extraction time, output size and memory must be read together. In the historical competitor comparison, each extractor reads its own producer's archive. Defaults differ across codecs, thread counts and solid-block layouts. Bandizip runs through its documented macOS command interface and includes full app initialization; other rows measure CLI engines. Open Silicon Zip's default extension-based store policy is shown separately from high-speed-off mode. All extracted files are checked byte-for-byte via SHA-256, and every archive is tested with 7-Zip.

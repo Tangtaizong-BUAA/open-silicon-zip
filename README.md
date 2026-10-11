@@ -3,7 +3,7 @@
 **为 Apple 芯片 Mac 制作的高速开源压缩软件，提供原生中文界面、Finder 右键操作和多核并行压缩。**
 
 [![CI](https://github.com/Tangtaizong-BUAA/open-silicon-zip/actions/workflows/ci.yml/badge.svg)](https://github.com/Tangtaizong-BUAA/open-silicon-zip/actions/workflows/ci.yml)
-[![Preview release](https://img.shields.io/badge/release-v0.2.0--preview.2-orange)](https://github.com/Tangtaizong-BUAA/open-silicon-zip/releases/tag/v0.2.0-preview.2)
+[![Preview release](https://img.shields.io/badge/release-v0.2.0--preview.3-orange)](https://github.com/Tangtaizong-BUAA/open-silicon-zip/releases/tag/v0.2.0-preview.3)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Apple Silicon](https://img.shields.io/badge/macOS-Apple_Silicon-111827)](#构建与安装)
 
@@ -11,27 +11,23 @@
 
 ## 下载
 
-**[下载 macOS ARM64 预览版（DMG）](https://github.com/Tangtaizong-BUAA/open-silicon-zip/releases/download/v0.2.0-preview.2/OpenSiliconZip-0.2.0-preview.2-macos-arm64.dmg)** · [ZIP](https://github.com/Tangtaizong-BUAA/open-silicon-zip/releases/download/v0.2.0-preview.2/OpenSiliconZip-0.2.0-preview.2-macos-arm64.zip) · [SHA-256](https://github.com/Tangtaizong-BUAA/open-silicon-zip/releases/download/v0.2.0-preview.2/SHA256SUMS.txt) · [更新记录](CHANGELOG.md)
+**[下载 macOS ARM64 预览版（DMG）](https://github.com/Tangtaizong-BUAA/open-silicon-zip/releases/download/v0.2.0-preview.3/OpenSiliconZip-0.2.0-preview.3-macos-arm64.dmg)** · [ZIP](https://github.com/Tangtaizong-BUAA/open-silicon-zip/releases/download/v0.2.0-preview.3/OpenSiliconZip-0.2.0-preview.3-macos-arm64.zip) · [SHA-256](https://github.com/Tangtaizong-BUAA/open-silicon-zip/releases/download/v0.2.0-preview.3/SHA256SUMS.txt) · [更新记录](CHANGELOG.md)
 
-适用于 **Apple 芯片 / macOS 15+**。`v0.2.0-preview.2` 是 ad-hoc 签名预览版，尚未完成 Developer ID 签名与 Apple 公证，未通过 Gatekeeper 分发验证。Finder 扩展已在本机开发签名环境中验证；预览包在其他 Mac 上的扩展启用尚未完成验证。完整状态见 [Release 说明](https://github.com/Tangtaizong-BUAA/open-silicon-zip/releases/tag/v0.2.0-preview.2)。
+适用于 **Apple 芯片 / macOS 15+**。`v0.2.0-preview.3` 是 ad-hoc 签名预览版，尚未完成 Developer ID 签名与 Apple 公证，未通过 Gatekeeper 分发验证。Finder 扩展已在本机开发签名环境中验证；预览包在其他 Mac 上的扩展启用尚未完成验证。完整状态见 [Release 说明](https://github.com/Tangtaizong-BUAA/open-silicon-zip/releases/tag/v0.2.0-preview.3)。
 
 ## 性能实测
 
-### 最新优化：preview.1 → preview.2
+### 最新优化：preview.2 → preview.3
 
-M4 Max / 48 GiB，同一输入预热后交替测量五轮。**70 次往返均通过完整文件 SHA-256 校验**，七项压缩包大小均未增大。粗体为同项最低耗时。
+M4 Max / 48 GiB，同一输入预热后交替测量五轮。**80 次往返 + 80 次读取同一压缩包的解压，全部通过逐文件 SHA-256 校验。绿色 + 粗体为同项最低实测值，↓ 越低越好。**
 
-| 工作负载 | 旧版压缩 ms ↓ | 新版压缩 ms ↓ | 旧版解压 ms ↓ | 新版解压 ms ↓ |
-|---|---:|---:|---:|---:|
-| ZIP · 32 KiB · JSON | 162.4 | **18.9** | 167.5 | **9.8** |
-| 7z · 32 KiB · JSON | 166.1 | **17.7** | 165.9 | **10.1** |
-| ZIP · 32 KiB · CLI | 162.3 | **17.2** | 167.7 | **10.3** |
-| ZIP · 64 MiB 单文件 | 162.0 | **87.2** | 163.9 | **81.1** |
-| ZIP · 128 MiB 混合 | 163.8 | **115.8** | 162.7 | **47.7** |
-| 7z · 128 MiB 混合 | 10142.1 | **9978.3** | 316.5 | **202.4** |
-| 7z PPMd · 2 MiB | 774.7 | **745.7** | 315.2 | **54.0** |
+[![preview.2 与 preview.3 性能对照：压缩、各自产物解压、同包解压、大小及内存；每项最低值加粗标绿。](docs/benchmarks/performance-round3.svg)](docs/BENCHMARKS.md#preview3-优化前后)
 
-小文件 7z 压缩内存峰值 **86.6 → 8.8 MiB**。上述是包含进程启动、读写与任务收尾的总耗时；小文件主要受益于消除最多 150 ms 的进度线程等待，混合 7z 压缩基本不变。完整内存取舍、条件与原始样本见 [优化报告](docs/BENCHMARKS.md#preview2-优化前后)。
+- **默认混合 7z 压缩：9.89 → 4.63 秒，2.14×；ZIP PPMd 同包解压：168 → 43 ms，3.89×。**
+- **2048 个小文件 7z 压缩：601 → 308 ms，1.95×；256 MiB COPY 压缩峰值内存：414 → 8.3 MiB，下降约 98%。**
+- **取舍完整公开：** 默认混合 7z 包增大 0.073%；小文件包从 16,422 增至 18,793 bytes（+14.44%）。混合 ZIP 压缩、关闭高速模式的混合 7z 和 COPY 同包解压此次变慢；没有宣称所有场景都提升。
+
+各自产物与同一压缩包的解压分别测量；计时包含引擎启动和 I/O。五轮、热缓存、合成输入的结果不代表通用排名。完整输出大小、内存与条件见 [本轮报告](docs/BENCHMARKS.md#preview3-优化前后) · [原始样本](docs/benchmarks/performance-round3.json) · [前一轮优化](docs/BENCHMARKS.md#preview2-优化前后)。
 
 ### 与其他压缩软件对照
 

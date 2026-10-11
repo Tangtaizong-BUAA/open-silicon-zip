@@ -106,17 +106,11 @@ final class FinderSync: FIFinderSync {
         let options = NSWorkspace.OpenConfiguration()
         options.activates = FinderMenuBuilder.needsUI(link)
         options.arguments = ["--finder-action"]
-        do {
-            // Post before launching so both cold launch and reopen can identify
-            // a Finder request without relying on URL-event delivery timing.
-            try JobInbox.post(link)
-            NSWorkspace.shared.openApplication(at: containingApp, configuration: options) { _, error in
-                if let error { Logger(subsystem: "org.opensiliconzip.mac", category: "Finder").error("Launch failed: \(error.localizedDescription, privacy: .public)") }
-            }
-        } catch {
-            NSWorkspace.shared.open([url], withApplicationAt: containingApp, configuration: options) { _, error in
-                if let error { Logger(subsystem: "org.opensiliconzip.mac", category: "Finder").error("URL handoff failed: \(error.localizedDescription, privacy: .public)") }
-            }
+        // LaunchServices owns delivery, including cold starts, so no polling or
+        // cross-container file handoff is needed. AppKit reports a URL launch
+        // to the app separately from an explicit icon/dashboard launch.
+        NSWorkspace.shared.open([url], withApplicationAt: containingApp, configuration: options) { _, error in
+            if let error { Logger(subsystem: "org.opensiliconzip.mac", category: "Finder").error("URL handoff failed: \(error.localizedDescription, privacy: .public)") }
         }
 
     }

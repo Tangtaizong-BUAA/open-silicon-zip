@@ -56,6 +56,9 @@ final class AppModel: ObservableObject {
     let passwordStore = PasswordStore()
     let presetStore = PresetStore()
     private let prefsStore = PreferencesStore()
+    // Sandbox-container access can wait on macOS. Keep Finder config writes
+    // ordered without blocking startup, progress windows or the updater UI.
+    private let finderConfigQueue = DispatchQueue(label: "org.opensiliconzip.finder-config", qos: .utility)
 
     private(set) var lastExternalRequest = Date.distantPast
     var openDashboardWindow: (() -> Void)?
@@ -74,7 +77,16 @@ final class AppModel: ObservableObject {
     }
 
     private var pendingLinks: [DeepLink] = []
+    private var dashboardRequested = false
+    func requestDashboard() {
+        if let openDashboardWindow { openDashboardWindow() }
+        else { dashboardRequested = true }
+    }
     func windowsReady() {
+        if dashboardRequested, let openDashboardWindow {
+            dashboardRequested = false
+            openDashboardWindow()
+        }
         let links = pendingLinks
         pendingLinks.removeAll()
         links.forEach { handle($0) }
@@ -219,7 +231,7 @@ final class AppModel: ObservableObject {
     /// Publishes accessible folders, presets and menu settings to the Finder extension (app group).
     func syncFinderConfig() {
         let cfg = FinderConfig(from: prefs, presets: presets)
-        try? cfg.write()
+        finderConfigQueue.async { try? cfg.write() }
     }
 
     // MARK: Presets

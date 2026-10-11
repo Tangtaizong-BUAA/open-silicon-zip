@@ -182,7 +182,7 @@ impl<W: Write + Seek> ArchiveWriter<W> {
                     Self::create_writer(&self.content_methods, &mut compressed, &mut more_sizes)?;
                 let mut write_len = 0;
                 let mut w = CompressWrapWriter::new(&mut w, &mut write_len);
-                let mut buf = [0u8; 4096];
+                let mut buf = vec![0u8; 256 << 10];
                 loop {
                     match r.read(&mut buf) {
                         Ok(n) => {
@@ -296,7 +296,7 @@ impl<W: Write + Seek> ArchiveWriter<W> {
             let mut w = Self::create_writer(content_methods, &mut compressed, &mut more_sizes)?;
             let mut write_len = 0;
             let mut w = CompressWrapWriter::new(&mut w, &mut write_len);
-            let mut buf = [0u8; 4096];
+            let mut buf = vec![0u8; 256 << 10];
 
             loop {
                 match r.read(&mut buf) {
@@ -783,7 +783,7 @@ pub fn prepare_block<R: Read>(
             )?;
             let mut write_len = 0;
             let mut w = CompressWrapWriter::new(&mut w, &mut write_len);
-            let mut buf = [0u8; 4096];
+            let mut buf = vec![0u8; 256 << 10];
             loop {
                 let n = r.read(&mut buf).map_err(|e| {
                     Error::io_msg(
