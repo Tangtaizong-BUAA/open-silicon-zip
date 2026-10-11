@@ -64,13 +64,14 @@ with tempfile.TemporaryDirectory(prefix='osz-security-') as work:
     for suffix in ('zip','7z','tar'):
         target=w/f'safe.{suffix}';part=pathlib.Path(str(target)+'.part');part.symlink_to(outside/'victim')
         require(run('create',target,source).returncode==0 and (outside/'victim').read_text()=='ORIGINAL',suffix+': temporary output cannot follow predictable .part symlink')
-    # Cancel a real CLI process after its temporary output exists, not just a token unit test.
+    # Force actual compression: default high-speed stores .bin and can finish before
+    # the polling interval on fast runners. Observe a live writer before signalling it.
     src=w/'cancel-input.bin'
     with src.open('wb') as f:
         block=os.urandom(1024*1024)
         for _ in range(32): f.write(block)
     dest=w/'cancelled.7z';dest.write_bytes(b'ORIGINAL ARCHIVE')
-    p=subprocess.Popen([fz,'create',str(dest),str(src),'--level','max','--json'],stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+    p=subprocess.Popen([fz,'create',str(dest),str(src),'--level','max','--high-speed','off','--json'],stdout=subprocess.PIPE,stderr=subprocess.PIPE)
     try:
         deadline=time.monotonic()+10
         while not list(w.glob('.osz-create-*')) and p.poll() is None and time.monotonic()<deadline: time.sleep(0.01)
