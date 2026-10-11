@@ -1,6 +1,6 @@
 # Open Silicon Zip
 
-**面向 Apple 芯片 Mac 的开源压缩软件，提供原生中文界面、Finder 右键操作和多核并行压缩。**
+**为 Apple 芯片 Mac 制作的高速开源压缩软件，提供原生中文界面、Finder 右键操作和多核并行压缩。**
 
 [![CI](https://github.com/Tangtaizong-BUAA/open-silicon-zip/actions/workflows/ci.yml/badge.svg)](https://github.com/Tangtaizong-BUAA/open-silicon-zip/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
