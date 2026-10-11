@@ -22,3 +22,5 @@ app/XcodeGen/*.xcodeproj/
 
 __pycache__/
 *.pyc
+
+/release-artifacts/

@@ -3,10 +3,17 @@
 **为 Apple 芯片 Mac 制作的高速开源压缩软件，提供原生中文界面、Finder 右键操作和多核并行压缩。**
 
 [![CI](https://github.com/Tangtaizong-BUAA/open-silicon-zip/actions/workflows/ci.yml/badge.svg)](https://github.com/Tangtaizong-BUAA/open-silicon-zip/actions/workflows/ci.yml)
+[![Preview release](https://img.shields.io/badge/release-v0.2.0--preview.1-orange)](https://github.com/Tangtaizong-BUAA/open-silicon-zip/releases/tag/v0.2.0-preview.1)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Apple Silicon](https://img.shields.io/badge/macOS-Apple_Silicon-111827)](#构建与安装)
 
-[性能实测](#性能实测) · [功能](#功能) · [构建与安装](#构建与安装) · [开发与贡献](#开发与贡献) · [安全说明](SECURITY.md)
+[下载](#下载) · [性能实测](#性能实测) · [功能](#功能) · [构建与安装](#构建与安装) · [开发与贡献](#开发与贡献) · [安全说明](SECURITY.md)
+
+## 下载
+
+**[下载 macOS ARM64 预览版（DMG）](https://github.com/Tangtaizong-BUAA/open-silicon-zip/releases/download/v0.2.0-preview.1/OpenSiliconZip-0.2.0-preview.1-macos-arm64.dmg)** · [ZIP](https://github.com/Tangtaizong-BUAA/open-silicon-zip/releases/download/v0.2.0-preview.1/OpenSiliconZip-0.2.0-preview.1-macos-arm64.zip) · [SHA-256](https://github.com/Tangtaizong-BUAA/open-silicon-zip/releases/download/v0.2.0-preview.1/SHA256SUMS.txt) · [更新记录](CHANGELOG.md)
+
+适用于 **Apple 芯片 / macOS 15+**。`v0.2.0-preview.1` 是 ad-hoc 签名预览版，尚未完成 Developer ID 签名与 Apple 公证，未通过 Gatekeeper 分发验证。Finder 扩展已在本机开发签名环境中验证；预览包在其他 Mac 上的扩展启用尚未完成验证。完整状态见 [Release 说明](https://github.com/Tangtaizong-BUAA/open-silicon-zip/releases/tag/v0.2.0-preview.1)。
 
 ## 性能实测
 
@@ -35,7 +42,7 @@
 
 ## 构建与安装
 
-当前提供源码构建，尚未提供经 Developer ID 签名、公证的安装包。
+可下载上方预览包，或按以下步骤从源码构建。DMG 内可将应用拖入「Applications」；预览包的签名与扩展限制见下载说明。
 
 **环境要求：** Apple 芯片 Mac、Xcode、Rust 1.94+、Homebrew `xz` 和 [XcodeGen](https://github.com/yonaskolb/XcodeGen)。源码目标为 macOS 13+；打包脚本会根据 liblzma 的实际要求提高最低系统版本，本机验证包为 macOS 15+。
 

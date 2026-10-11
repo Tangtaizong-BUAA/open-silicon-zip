@@ -39,6 +39,14 @@ PYPLIST
   codesign --force --sign "$IDENT" "$STAGE/Contents/Frameworks/liblzma.5.dylib"
 fi
 APPEX="$STAGE/Contents/PlugIns/FastZipFinderSync.appex"
+# Swift linkers retain absolute module paths in debug symbol entries. Remove
+# those before final signing; keep ordinary symbols for useful crash reports.
+for BIN in "$STAGE/Contents/MacOS/FastZip" \
+  "$STAGE/Contents/Frameworks/FastZipKit.framework/Versions/A/FastZipKit" \
+  "$APPEX/Contents/MacOS/FastZipFinderSync" \
+  "$APPEX/Contents/Frameworks/FastZipKit.framework/Versions/A/FastZipKit"; do
+  if [ -f "$BIN" ]; then strip -S "$BIN"; fi
+done
 # Nested code is signed from the inside out, including the Rust helper.
 if [ -d "$APPEX/Contents/Frameworks/FastZipKit.framework" ]; then
   codesign --force --sign "$IDENT" "$APPEX/Contents/Frameworks/FastZipKit.framework"

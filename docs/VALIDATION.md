@@ -8,6 +8,12 @@ The final 0.2.0 installed app was launched and its Finder extension enabled. A r
 
 Settings initially selected Simplified Chinese. Selecting English and restarting visibly changed the dashboard, menu bar and Settings to English. The language setting was then restored to Simplified Chinese. Dynamic counts, job state and duration strings use explicit translated format keys. Developer diagnostics and raw codec messages may retain their original language.
 
+## Downloadable preview artifacts
+
+`v0.2.0-preview.1` provides ARM64 DMG and ZIP packages for macOS 15+. The ZIP was extracted and the DMG mounted read-only; every application file hash, symlink and permission mode matched the staging bundle. Both nested ad-hoc signatures verified, and the engine extracted from the final ZIP passed all 24 synthetic security checks. The packaging pipeline removes builder home paths and does not include provisioning profiles.
+
+These preview artifacts are **not notarized** and have no Developer ID distribution signature. Local `spctl --assess --type execute` rejects the ad-hoc package. This is separate from the development-signed installed-app Finder acceptance above; Finder extension activation on other Macs using the preview signature has not been verified.
+
 ## Automated checks
 
 - Swift: **67 tests passed**.
