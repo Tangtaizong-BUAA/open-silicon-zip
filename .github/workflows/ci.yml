@@ -1,0 +1,26 @@
+name: Validate
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  macos:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install compatibility tools
+        run: |
+          brew install xz sevenzip xcodegen
+          if ! command -v 7z >/dev/null; then ln -s "$(command -v 7zz)" "$(brew --prefix)/bin/7z"; fi
+      - name: Rust tests
+        run: RUST_TEST_THREADS=1 cargo test --locked --release --manifest-path engine/fz-core/Cargo.toml
+      - name: Swift tests
+        run: swift test --package-path app
+      - name: Security and localization regressions
+        run: |
+          cargo build --locked --release --manifest-path engine/fz-core/Cargo.toml
+          python3 scripts/security-regression.py
+          python3 scripts/check-localization.py
+          bash compat-suite/run.sh
+      - name: Package ARM64 application
+        run: bash app/package-app.sh

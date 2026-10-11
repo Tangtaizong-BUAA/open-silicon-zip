@@ -1,0 +1,3 @@
+Real-world LHA/LZH archives copied from the Lhasa test suite (https://github.com/fragglet/lhasa, test/archives),
+Copyright (c) 2011-2025 Simon Howard, ISC license. Produced by genuine LHA tools (LHA 2.13/2.55e/UNIX 1.14i, Lha for OS/2, Explzh).
+Used as test data only; expected output is cross-checked against the `lha` (Lhasa) command when installed, and via the archives' own CRC16.

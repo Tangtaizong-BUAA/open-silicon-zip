@@ -1,0 +1,24 @@
+.DS_Store
+target/
+engine/**/target/
+compat-suite/out/
+app/.build/
+app/.swiftpm/
+app/build/
+app/dist*/
+app/XcodeGen/*.xcodeproj/
+**/xcuserdata/
+*.xcuserstate
+*.mobileprovision
+*.provisionprofile
+*.p12
+*.key
+.env
+.env.*
+# Local historical notes contain machine-specific identifiers.
+/HANDOFF.md
+/STATUS.md
+/validation-local/
+
+__pycache__/
+*.pyc

@@ -1,0 +1,64 @@
+name: FastZip
+options:
+  bundleIdPrefix: org.opensiliconzip
+  deploymentTarget:
+    macOS: "13.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    CODE_SIGNING_ALLOWED: NO
+    ARCHS: arm64
+    CURRENT_PROJECT_VERSION: 2
+    MARKETING_VERSION: 0.2.0
+    SWIFT_VERSION: "5.9"
+    ENABLE_USER_SCRIPT_SANDBOXING: false
+
+targets:
+  FastZipKit:
+    type: framework
+    platform: macOS
+    sources:
+      - path: ../Sources/FastZipKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.opensiliconzip.mac.kit
+        GENERATE_INFOPLIST_FILE: true
+        CREATE_INFOPLIST_SECTION_IN_BINARY: true
+
+  FastZipApp:
+    type: application
+    platform: macOS
+    sources:
+      - path: ../Sources/FastZipApp
+    dependencies:
+      - target: FastZipKit
+        embed: true
+      - target: FastZipFinderSync
+        embed: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.opensiliconzip.mac
+        PRODUCT_NAME: FastZip
+        INFOPLIST_FILE: ../scripts/App-Info.plist
+
+  FastZipFinderSync:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: ../Sources/FinderSyncExtension
+    dependencies:
+      - target: FastZipKit
+        embed: true
+      - sdk: FinderSync.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.opensiliconzip.mac.findersync
+        GENERATE_INFOPLIST_FILE: false
+        INFOPLIST_FILE: ../scripts/Appex-Info.plist
+        CODE_SIGN_ENTITLEMENTS: ../scripts/appex-xcode.entitlements
+
+schemes:
+  FastZipApp:
+    build:
+      targets:
+        FastZipApp: all

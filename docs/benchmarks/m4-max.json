@@ -1,0 +1,143 @@
+{
+  "hardware": "Apple M4 Max, 12P+4E, 48 GiB",
+  "macOS": "15.7.1",
+  "date": "2026-10-11",
+  "mixed": {
+    "input_bytes": 134217728,
+    "corpus_sha256": "f57346b3d68079c621e4ed9ec9dc9265d8fed1cb6b7e5afa00b4fc41cbc0cf15",
+    "repetitions": 3,
+    "results": {
+      "zip-fast": [
+        {
+          "median_seconds": 0.16679279098752886,
+          "MiB_per_second": 767.4192586031527,
+          "peak_RSS_MiB": 181.171875,
+          "seconds": [
+            0.16679279098752886,
+            0.16451991599751636,
+            0.167677833000198
+          ]
+        },
+        {
+          "median_seconds": 0.16412120801396668,
+          "MiB_per_second": 779.9113932253485,
+          "peak_RSS_MiB": 163.34375,
+          "seconds": [
+            0.16566187498392537,
+            0.16412120801396668,
+            0.1638057500240393
+          ]
+        }
+      ],
+      "zip-normal": [
+        {
+          "median_seconds": 0.16617262497311458,
+          "MiB_per_second": 770.2833124331363,
+          "peak_RSS_MiB": 185.90625,
+          "seconds": [
+            0.16719574999297038,
+            0.1660470410133712,
+            0.16617262497311458
+          ]
+        },
+        {
+          "median_seconds": 0.1648817919776775,
+          "MiB_per_second": 776.3137364332458,
+          "peak_RSS_MiB": 166.296875,
+          "seconds": [
+            0.1617767090210691,
+            0.1656570410123095,
+            0.1648817919776775
+          ]
+        }
+      ],
+      "7z-normal": [
+        {
+          "median_seconds": 43.67641129094409,
+          "MiB_per_second": 2.930643709423527,
+          "peak_RSS_MiB": 252.46875,
+          "seconds": [
+            47.42030512500787,
+            43.67641129094409,
+            42.88989091699477
+          ]
+        },
+        {
+          "median_seconds": 10.91912587499246,
+          "MiB_per_second": 11.722550089211092,
+          "peak_RSS_MiB": 715.0625,
+          "seconds": [
+            11.068738708039746,
+            10.91912587499246,
+            9.99931933300104
+          ]
+        }
+      ]
+    }
+  },
+  "large_store": {
+    "input_MiB": 512,
+    "one_MiB_block_sha256": "0ee26fdcbf0cd43be56fcdc5eb3b38fa62d4177cd61f51706636d743faf537c5",
+    "repetitions": 5,
+    "results": [
+      {
+        "median_seconds": 0.32074637501500547,
+        "MiB_per_second": 1596.2768089773333,
+        "peak_RSS_MiB": 341.78125,
+        "seconds": [
+          0.16763258300488815,
+          0.32212445803452283,
+          0.3209995410288684,
+          0.32074637501500547,
+          0.16746020899154246
+        ]
+      },
+      {
+        "median_seconds": 0.3169223750010133,
+        "MiB_per_second": 1615.5375586793548,
+        "peak_RSS_MiB": 153.171875,
+        "seconds": [
+          0.31782420800300315,
+          0.31877254199935123,
+          0.1638113330118358,
+          0.3169223750010133,
+          0.16462137503549457
+        ]
+      }
+    ]
+  },
+  "baseline_revision_local_only": "66c3202",
+  "baseline_binary_sha256": "df69bbe727cd742eeaed7e5f1085775e24a7043ac60307c30d3dbec108185c46",
+  "final_binary_sha256": "25c9634ab98b6fc6f62c234bfdf56486e38352aca41058ff79732cb6c9ca6e7a",
+  "seven_zip_size_check": {
+    "input_bytes": 134217728,
+    "corpus_sha256": "f57346b3d68079c621e4ed9ec9dc9265d8fed1cb6b7e5afa00b4fc41cbc0cf15",
+    "repetitions": 1,
+    "results": {
+      "7z-normal": [
+        {
+          "median_seconds": 44.922212291974574,
+          "MiB_per_second": 2.8493699101027445,
+          "peak_RSS_MiB": 254.1875,
+          "seconds": [
+            44.922212291974574
+          ],
+          "archive_bytes": [
+            82402802
+          ]
+        },
+        {
+          "median_seconds": 9.994860667036846,
+          "MiB_per_second": 12.806581728762396,
+          "peak_RSS_MiB": 712.109375,
+          "seconds": [
+            9.994860667036846
+          ],
+          "archive_bytes": [
+            82453203
+          ]
+        }
+      ]
+    }
+  }
+}

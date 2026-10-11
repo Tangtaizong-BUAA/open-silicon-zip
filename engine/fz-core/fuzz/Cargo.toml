@@ -1,0 +1,49 @@
+[package]
+name = "fz-core-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+fz-core = { path = ".." }
+
+[[bin]]
+name = "zip_open"
+path = "fuzz_targets/zip_open.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "sevenz_list"
+path = "fuzz_targets/sevenz_list.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "tar_list"
+path = "fuzz_targets/tar_list.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "detect"
+path = "fuzz_targets/detect.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "codepage"
+path = "fuzz_targets/codepage.rs"
+test = false
+doc = false
+bench = false
+
+[workspace]
