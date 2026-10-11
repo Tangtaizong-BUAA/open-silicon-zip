@@ -536,3 +536,31 @@
 "Apply to all" = "应用到全部";
 
 "Compressing" = "正在压缩";
+
+"Browse…" = "浏览…";
+
+"Preparing…" = "正在准备…";
+
+"Close" = "关闭";
+
+"Software Updates" = "软件更新";
+
+"Updates" = "更新";
+
+"Check for Updates…" = "检查更新…";
+
+"Check for updates automatically" = "自动检查新版本并提醒";
+
+"Download and install updates automatically" = "自动下载并安装更新";
+
+"New versions are checked every four hours while the app is running. Updates are signed and served by the home server." = "应用运行时每四小时检查新版本。更新包经过签名校验，由家庭服务器提供。";
+
+"Updates will wait until all jobs finish." = "压缩和解压任务完成后才会安装并重启。";
+
+"The update is ready and will restart after your jobs finish." = "更新已就绪，正在等待任务完成。";
+
+"An update is available" = "有新版本可用";
+
+"Open Silicon Zip %@ is ready. Open Check for Updates to install it." = "Open Silicon Zip %@ 已发布，打开“检查更新”即可安装。";
+
+"Update to %@…" = "更新到 %@…";

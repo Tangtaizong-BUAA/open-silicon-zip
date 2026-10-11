@@ -105,7 +105,10 @@ final class FinderSync: FIFinderSync {
             .deletingLastPathComponent().deletingLastPathComponent()
         let options = NSWorkspace.OpenConfiguration()
         options.activates = FinderMenuBuilder.needsUI(link)
+        options.arguments = ["--finder-action"]
         do {
+            // Post before launching so both cold launch and reopen can identify
+            // a Finder request without relying on URL-event delivery timing.
             try JobInbox.post(link)
             NSWorkspace.shared.openApplication(at: containingApp, configuration: options) { _, error in
                 if let error { Logger(subsystem: "org.opensiliconzip.mac", category: "Finder").error("Launch failed: \(error.localizedDescription, privacy: .public)") }

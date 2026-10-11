@@ -1,0 +1,31 @@
+services:
+  updates:
+    image: nginx:alpine
+    container_name: open-silicon-zip-updates
+    restart: unless-stopped
+    user: "101:101"
+    command: ["nginx", "-g", "daemon off;"]
+    networks: [web]
+    expose: ["8080"]
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./public:/srv/updates:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 32m
+    cpus: 0.25
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "2"}
+networks:
+  web:
+    external: true
+    name: demo-site_default

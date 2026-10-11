@@ -36,7 +36,9 @@ final class FinderMenuTests: XCTestCase {
     func testExtractionMenuForArchives() {
         let specs = FinderMenuBuilder.build(selection: [URL(fileURLWithPath: "/Users/me/photos.tar.gz")], config: config())
         let t = titles(specs)
-        XCTAssertTrue(t.contains("Extract Here (Smart)"))
+        XCTAssertFalse(t.contains("Extract Here (Smart)"))
+        XCTAssertEqual(specs.first?.link, .extract(paths: ["/Users/me/photos.tar.gz"], mode: .named, deleteArchive: false))
+        XCTAssertTrue(t.contains("Extract Here"))
         XCTAssertTrue(t.contains("Extract to \"photos/\""))
         XCTAssertTrue(t.contains("Test Archive"))
         XCTAssertFalse(t.contains("Compress with FastZip..."))

@@ -536,3 +536,31 @@
 "Apply to all" = "Apply to all";
 
 "Compressing" = "Compressing";
+
+"Browse…" = "Browse…";
+
+"Preparing…" = "Preparing…";
+
+"Close" = "Close";
+
+"Software Updates" = "Software Updates";
+
+"Updates" = "Updates";
+
+"Check for Updates…" = "Check for Updates…";
+
+"Check for updates automatically" = "Check for updates automatically";
+
+"Download and install updates automatically" = "Download and install updates automatically";
+
+"New versions are checked every four hours while the app is running. Updates are signed and served by the home server." = "New versions are checked every four hours while the app is running. Updates are signed and served by the home server.";
+
+"Updates will wait until all jobs finish." = "Updates will wait until all jobs finish.";
+
+"The update is ready and will restart after your jobs finish." = "The update is ready and will restart after your jobs finish.";
+
+"An update is available" = "An update is available";
+
+"Open Silicon Zip %@ is ready. Open Check for Updates to install it." = "Open Silicon Zip %@ is ready. Open Check for Updates to install it.";
+
+"Update to %@…" = "Update to %@…";

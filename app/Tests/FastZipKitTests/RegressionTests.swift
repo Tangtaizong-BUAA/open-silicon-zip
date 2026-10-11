@@ -9,7 +9,7 @@ final class RegressionTests: XCTestCase {
         let cfg = FinderConfig(from: prefs, presets: [])
         let file = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("fixture.zip")
         let menu = FinderMenuBuilder.build(selection: [file], config: cfg)
-        XCTAssertTrue(menu.contains { $0.link == .extract(paths: [file.path], mode: .smart, deleteArchive: false) })
+        XCTAssertTrue(menu.contains { $0.link == .extract(paths: [file.path], mode: .named, deleteArchive: false) })
     }
 
     func testFormatLookupPreservesPlaceholdersAndPercentSigns() {

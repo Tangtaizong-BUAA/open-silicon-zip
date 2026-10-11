@@ -15,6 +15,8 @@ struct FastZipApp: App {
                 .environmentObject(model)
         }
         .handlesExternalEvents(matching: Set<String>())
+        .defaultLaunchBehavior(FinderLaunch.isQuickLaunch ? .suppressed : .automatic)
+        .restorationBehavior(.disabled)
         .commands { AppCommands(model: model) }
 
         // One window per archive (FR-001, FR-017).
@@ -26,6 +28,8 @@ struct FastZipApp: App {
             }
         }
         .handlesExternalEvents(matching: Set<String>())
+        .defaultLaunchBehavior(.suppressed)
+        .restorationBehavior(.disabled)
         .defaultSize(width: 1000, height: 680)
 
         WindowGroup("New Archive", id: "new", for: NewArchiveSeed.self) { binding in
@@ -34,6 +38,8 @@ struct FastZipApp: App {
                 .environmentObject(model)
         }
         .handlesExternalEvents(matching: Set<String>())
+        .defaultLaunchBehavior(.suppressed)
+        .restorationBehavior(.disabled)
         .windowResizability(.contentSize)
 
         Window("Jobs", id: "jobs") {
@@ -41,6 +47,8 @@ struct FastZipApp: App {
                 .modifier(AppChrome())
                 .environmentObject(model)
         }
+        .defaultLaunchBehavior(.suppressed)
+        .restorationBehavior(.disabled)
         .defaultSize(width: 560, height: 520)
 
         Window("Password Manager", id: "passwords") {
@@ -48,6 +56,8 @@ struct FastZipApp: App {
                 .modifier(AppChrome())
                 .environmentObject(model)
         }
+        .defaultLaunchBehavior(.suppressed)
+        .restorationBehavior(.disabled)
         .defaultSize(width: 520, height: 480)
 
         Window("Tools", id: "tools") {
@@ -55,6 +65,8 @@ struct FastZipApp: App {
                 .modifier(AppChrome())
                 .environmentObject(model)
         }
+        .defaultLaunchBehavior(.suppressed)
+        .restorationBehavior(.disabled)
         .defaultSize(width: 640, height: 560)
 
         Settings {
@@ -75,6 +87,7 @@ struct AppChrome: ViewModifier {
         content
             .tint(Theme.accent(model.prefs, dark: scheme == .dark))
             .onAppear {
+                model.openDashboardWindow = { openWindow(id: "dashboard") }
                 model.openArchiveWindow = { openWindow(id: "archive", value: $0) }
                 model.openNewArchiveWindow = { openWindow(id: "new", value: $0) }
                 model.openJobsWindow = { openWindow(id: "jobs") }
@@ -90,7 +103,17 @@ struct AppCommands: Commands {
     @ObservedObject var model: AppModel
     @Environment(\.openWindow) private var openWindow
 
+    private func registerOpeners() {
+        model.openDashboardWindow = { openWindow(id: "dashboard") }
+        model.openArchiveWindow = { openWindow(id: "archive", value: $0) }
+        model.openNewArchiveWindow = { openWindow(id: "new", value: $0) }
+        model.openJobsWindow = { openWindow(id: "jobs") }
+        Task { @MainActor in model.windowsReady() }
+    }
+
     var body: some Commands {
+        let _ = registerOpeners()
+        CommandGroup(after: .appInfo) { CheckForUpdatesButton() }
         CommandGroup(replacing: .newItem) {
             Button("New Archive...") { openWindow(id: "new", value: NewArchiveSeed()) }
                 .keyboardShortcut("n")
@@ -117,4 +140,9 @@ struct AppCommands: Commands {
             Button("Password Manager") { openWindow(id: "passwords") }.keyboardShortcut("p", modifiers: [.command, .shift])
         }
     }
+}
+
+/// Capture the launch intent before the inbox consumer can drain it.
+enum FinderLaunch {
+    static let isQuickLaunch = ProcessInfo.processInfo.arguments.contains("--finder-action") || JobInbox.hasPendingRequests
 }

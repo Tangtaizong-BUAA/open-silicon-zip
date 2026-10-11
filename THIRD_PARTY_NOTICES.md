@@ -136,3 +136,7 @@ Generated from the locked dependency metadata for aarch64-apple-darwin. License 
 | zstd | 0.14.1 | BSD-3-Clause |
 | zstd-safe | 8.1.0 | BSD-3-Clause |
 | zstd-sys | 2.1.1+zstd.1.5.7 | BSD-3-Clause |
+
+## Sparkle 2.10.0
+
+The macOS application embeds [Sparkle](https://github.com/sparkle-project/Sparkle), the open-source update framework. Its license and bundled component notices are reproduced in [licenses/Sparkle-LICENSE.txt](licenses/Sparkle-LICENSE.txt). Update archives and feeds are authenticated with Ed25519; the signing key is not distributed with the application or server.

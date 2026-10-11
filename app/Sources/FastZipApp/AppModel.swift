@@ -57,6 +57,22 @@ final class AppModel: ObservableObject {
     let presetStore = PresetStore()
     private let prefsStore = PreferencesStore()
 
+    private(set) var lastExternalRequest = Date.distantPast
+    var openDashboardWindow: (() -> Void)?
+    let quickWindows = QuickActionWindows()
+    private var quickProgress: [QuickProgress] = []
+
+    private func beginQuickProgress(_ title: String) -> QuickProgress {
+        let progress = quickWindows.progress(title: title, app: self)
+        quickProgress.append(progress)
+        let close = progress.onFinished
+        progress.onFinished = { [weak self, weak progress] in
+            close?()
+            self?.quickProgress.removeAll { $0 === progress }
+        }
+        return progress
+    }
+
     private var pendingLinks: [DeepLink] = []
     func windowsReady() {
         let links = pendingLinks
@@ -109,6 +125,8 @@ final class AppModel: ObservableObject {
 
     private func apply(snapshot: [Job]) {
         jobs = snapshot
+        quickProgress.forEach { $0.update(snapshot) }
+        quickProgress.removeAll { !$0.preparing && ($0.error != nil || (!$0.ids.isEmpty && $0.jobs.count == $0.ids.count && $0.jobs.allSatisfy { $0.state.isTerminal })) }
         var s = QueueSummary()
         var rate = 0.0
         var processed: UInt64 = 0
@@ -267,7 +285,16 @@ final class AppModel: ObservableObject {
     }
 
     func handle(_ link: DeepLink) {
-        guard openArchiveWindow != nil, openNewArchiveWindow != nil else { pendingLinks.append(link); return }
+        lastExternalRequest = Date()
+        switch link {
+        case .new, .compress, .extract:
+            for window in NSApp.windows {
+                let id = window.identifier?.rawValue ?? ""
+                if id.hasPrefix("dashboard") || id == "jobs" { window.orderOut(nil) }
+            }
+        default: break
+        }
+        if case .open = link, openArchiveWindow == nil { pendingLinks.append(link); return }
         let deletes: Bool
         switch link {
         case .extract(_, _, let value), .compress(_, _, let value, _, _, _): deletes = value
@@ -285,9 +312,11 @@ final class AppModel: ObservableObject {
         case .open(let paths):
             paths.forEach { openArchive(URL(fileURLWithPath: $0)) }
         case .new(let paths, let preset):
-            openNewArchiveWindow?(NewArchiveSeed(paths: paths, presetName: preset))
+            if let preset {
+                quickCompress(paths: paths, format: .zip, deleteSources: false, each: false, preset: preset, rule: nil)
+            } else { quickWindows.chooseCompression(paths: paths, app: self) }
         case .extract(let paths, let mode, let del):
-            for p in paths { extract(URL(fileURLWithPath: p), mode: mode, deleteArchive: del ? true : nil) }
+            for p in paths { extract(URL(fileURLWithPath: p), mode: mode == .smart ? .named : mode, deleteArchive: del, compact: true) }
         case .compress(let paths, let format, let del, let each, let preset, let rule):
             quickCompress(paths: paths, format: format, deleteSources: del, each: each, preset: preset, rule: rule)
         case .test(let paths):
@@ -347,14 +376,17 @@ final class AppModel: ObservableObject {
     // MARK: Extraction (FR-201..212)
 
     func extract(_ archive: URL, mode: ExtractMode, only entries: [String] = [], deleteArchive: Bool? = nil,
-                 into override: URL? = nil, codepage: String? = nil, password: String? = nil) {
+                 into override: URL? = nil, codepage: String? = nil, password: String? = nil, compact: Bool = false) {
         Task { await self.performExtract(archive, mode: mode, entries: entries, deleteArchive: deleteArchive,
-                                    override: override, codepage: codepage, password: password) }
+                                    override: override, codepage: codepage, password: password, compact: compact) }
     }
 
     private func performExtract(_ archive: URL, mode: ExtractMode, entries selected: [String], deleteArchive: Bool?,
-                                override: URL?, codepage: String?, password: String?) async {
+                                override: URL?, codepage: String?, password: String?, compact: Bool) async {
         let name = archive.lastPathComponent
+        let progress = compact ? beginQuickProgress(name) : nil
+        var progressError: String?
+        defer { progress?.finish(jobs, error: progressError) }
         do {
             let session = try await openSession(archive, codepage: codepage, password: password)
 
@@ -381,10 +413,9 @@ final class AppModel: ObservableObject {
                 if plan.kind == .nothing { return }
                 candidates = plan.collisionCandidates
                 finalFolder = plan.wrapperFolder.map { baseDir.appendingPathComponent($0) } ?? baseDir
-            case .named where selected.isEmpty:
-                let folder = SmartExtract.archiveBaseName(name)
-                destination = baseDir.appendingPathComponent(folder)
-                candidates = [folder]
+            case _ where selected.isEmpty && (mode == .named || (compact && mode != .here)):
+                destination = try ExtractionFolder.reserve(in: baseDir, archiveName: name)
+                candidates = []
                 finalFolder = destination
             default:
                 candidates = Self.topLevelNames(session.entries)
@@ -413,14 +444,19 @@ final class AppModel: ObservableObject {
             let id = await queue.enqueue(.extract(cmd), title: name)
 
             var actions: [PostAction] = []
-            if prefs.general.openDestinationAfterExtract, let f = finalFolder { actions.append(.openDestination(f)) }
+            progress?.ids.insert(id)
+            if !compact && prefs.general.openDestinationAfterExtract, let f = finalFolder { actions.append(.openDestination(f)) }
             if deleteArchive ?? prefs.extraction.deleteArchiveAfter { actions.append(.trash([archive])) }
             registerPostActions(actions, for: id)
-            openJobsWindow?()
+            if !compact { openJobsWindow?() }
         } catch let e as FZError {
-            if e.code != .cancelled { await Dialogs.showError(e, context: name) }
+            if e.code != .cancelled {
+                if compact { progressError = e.localizedDescription }
+                else { await Dialogs.showError(e, context: name) }
+            }
         } catch {
-            await Dialogs.showError(FZError(code: .io, message: error.localizedDescription), context: name)
+            if compact { progressError = error.localizedDescription }
+            else { await Dialogs.showError(FZError(code: .io, message: error.localizedDescription), context: name) }
         }
     }
 
@@ -500,7 +536,9 @@ final class AppModel: ObservableObject {
 
     // MARK: Creation (FR-101..124)
 
-    func create(_ r: CreateRequest) async {
+    func create(_ r: CreateRequest, compact: Bool = false) async {
+        let progress = compact ? beginQuickProgress(r.baseName) : nil
+        defer { progress?.finish(jobs) }
         let rule = r.settings.filenameRule.isEmpty ? "${NAME}" : r.settings.filenameRule
         var groups: [(inputs: [URL], base: String)]
         if r.settings.options.oneArchivePerItem {
@@ -508,7 +546,7 @@ final class AppModel: ObservableObject {
         } else {
             groups = [(inputs: r.inputs, base: r.baseName)]
         }
-        var policy = r.settings.conflict
+        var policy = compact ? ConflictPolicy.rename : r.settings.conflict
         for g in groups {
             let expanded = FilenameRule.expand(rule, name: g.base)
             let fileName = FilenameRule.ensureExtension(expanded, r.settings.format.fileExtension)
@@ -550,13 +588,14 @@ final class AppModel: ObservableObject {
             let id = await queue.enqueue(.create(cmd), title: fileName)
             var actions: [PostAction] = []
 
-            if r.settings.options.openAfter { actions.append(.reveal(out)) }
+            progress?.ids.insert(id)
+            if !compact && r.settings.options.openAfter { actions.append(.reveal(out)) }
             if r.settings.options.deleteSources { actions.append(.trash(g.inputs)) }
             if r.settings.options.testAfter || r.settings.options.deleteSources {
                 registerPostActions([.test(out, cmd.password, actions)], for: id)
             } else { registerPostActions(actions, for: id) }
         }
-        openJobsWindow?()
+        if !compact { openJobsWindow?() }
     }
 
     private static func uniqueURL(_ url: URL) -> URL {
@@ -569,7 +608,7 @@ final class AppModel: ObservableObject {
 
     /// Finder / Services one-click compression (FR-502, FR-506).
     func quickCompress(paths: [String], format: ArchiveFormat, deleteSources: Bool, each: Bool,
-                       preset presetName: String?, rule: String?) {
+                       preset presetName: String?, rule: String?, destination: URL? = nil) {
         let inputs = paths.map { URL(fileURLWithPath: $0) }
         guard let first = inputs.first else { return }
         var settings = CreateSettings()
@@ -585,11 +624,11 @@ final class AppModel: ObservableObject {
         if let rule { settings.filenameRule = rule }
         let base = inputs.count == 1 ? first.lastPathComponent : first.deletingLastPathComponent().lastPathComponent
         let request = CreateRequest(inputs: inputs, settings: settings,
-                                    destination: first.deletingLastPathComponent(), baseName: base, password: nil)
+                                    destination: destination ?? first.deletingLastPathComponent(), baseName: base, password: nil)
         Task {
             var r = request
             if let id = presetPasswordID { r.password = (try? await self.passwordStore.item(id: id))?.secret }
-            await self.create(r)
+            await self.create(r, compact: true)
         }
     }
 
@@ -624,7 +663,7 @@ final class AppModel: ObservableObject {
 }
 
 enum Notifier {
-    static func post(title: String, body: String) {
+    static func post(title: String, body: String, identifier: String = UUID().uuidString) {
         // UNUserNotificationCenter traps when not running from an .app bundle (e.g. `swift run`).
         guard Bundle.main.bundleURL.pathExtension == "app" else { return }
         let center = UNUserNotificationCenter.current()
@@ -633,7 +672,7 @@ enum Notifier {
             let content = UNMutableNotificationContent()
             content.title = title
             content.body = body
-            center.add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
+            center.add(UNNotificationRequest(identifier: identifier, content: content, trigger: nil))
         }
     }
 }

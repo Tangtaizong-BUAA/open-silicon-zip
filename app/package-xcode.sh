@@ -52,6 +52,18 @@ if [ -d "$APPEX/Contents/Frameworks/FastZipKit.framework" ]; then
   codesign --force --sign "$IDENT" "$APPEX/Contents/Frameworks/FastZipKit.framework"
 fi
 codesign --force --sign "$IDENT" --entitlements scripts/appex-xcode.entitlements "$APPEX"
+# Xcode may thin Sparkle's binaries even with code signing disabled. Re-sign
+# its helper executables and bundles inside out, preserving sandbox entitlements.
+SPARKLE="$STAGE/Contents/Frameworks/Sparkle.framework"
+if [ -d "$SPARKLE" ]; then
+  for CODE in "$SPARKLE/Versions/B/Autoupdate" \
+    "$SPARKLE/Versions/B/Updater.app" \
+    "$SPARKLE/Versions/B/XPCServices/Downloader.xpc" \
+    "$SPARKLE/Versions/B/XPCServices/Installer.xpc"; do
+    codesign --force --sign "$IDENT" --preserve-metadata=entitlements "$CODE"
+  done
+  codesign --force --sign "$IDENT" "$SPARKLE"
+fi
 codesign --force --sign "$IDENT" "$STAGE/Contents/Frameworks/FastZipKit.framework"
 codesign --force --sign "$IDENT" "$STAGE/Contents/MacOS/fz"
 codesign --force --sign "$IDENT" "$STAGE/Contents/MacOS/FastZip"

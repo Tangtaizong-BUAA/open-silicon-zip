@@ -200,6 +200,13 @@ public enum JobInbox {
         AppGroup.extensionContainerMirrorURL.appendingPathComponent("Inbox", isDirectory: true)
     }
 
+    public static var hasPendingRequests: Bool {
+        [directory, mirrorDirectory].contains { dir in
+            ((try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? [])
+                .contains { $0.pathExtension == "url" }
+        }
+    }
+
     public static func post(_ link: DeepLink) throws {
         let payload = Data(link.url.absoluteString.utf8)
         let name = "\(UUID().uuidString).url"

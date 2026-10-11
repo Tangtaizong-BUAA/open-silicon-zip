@@ -82,10 +82,9 @@ public enum FinderMenuBuilder {
             let apaths = archives.map(\.path)
             let single = archives.count == 1
             let base = SmartExtract.archiveBaseName(archives[0].lastPathComponent)
-            primary.append(MenuSpec(title: L10n.t("Extract Here (Smart)"), link: .extract(paths: apaths, mode: .smart, deleteArchive: false)))
-            primary.append(MenuSpec(title: L10n.t("Extract Here"), link: .extract(paths: apaths, mode: .here, deleteArchive: false)))
             primary.append(MenuSpec(title: single ? L10n.f("Extract to \"%@/\"", base) : L10n.t("Extract Each to Separate Folders"),
                                     link: .extract(paths: apaths, mode: .named, deleteArchive: false)))
+            primary.append(MenuSpec(title: L10n.t("Extract Here"), link: .extract(paths: apaths, mode: .here, deleteArchive: false)))
             primary.append(MenuSpec(title: L10n.t("Extract to..."), link: .extract(paths: apaths, mode: .other, deleteArchive: false)))
             primary.append(MenuSpec(title: L10n.t("Open with FastZip"), link: .open(paths: apaths)))
             primary.append(MenuSpec(title: L10n.t("Test Archive"), link: .test(paths: apaths)))

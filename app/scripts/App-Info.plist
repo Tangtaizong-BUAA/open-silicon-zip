@@ -254,11 +254,11 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>2</string>
+	<string>3</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.utilities</string>
 	<key>LSMinimumSystemVersion</key>
-	<string>13.0</string>
+	<string>15.0</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSPrincipalClass</key>
@@ -333,5 +333,21 @@
 			</array>
 		</dict>
 	</array>
+	<key>SUFeedURL</key>
+	<string>https://home.argonai.cn/open-silicon-zip/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>hcwPv7ttLCbB6vDTsEUVOjtmF8fB+Op9/JSlGDP/6ok=</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUAutomaticallyUpdate</key>
+	<false/>
+	<key>SUScheduledCheckInterval</key>
+	<integer>14400</integer>
+	<key>SUEnableSystemProfiling</key>
+	<false/>
+	<key>SURequireSignedFeed</key>
+	<true/>
+	<key>SUVerifyUpdateBeforeExtraction</key>
+	<true/>
 </dict>
 </plist>

@@ -1,16 +1,31 @@
 import AppKit
+import UserNotifications
 import FastZipKit
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     override init() {
+        _ = FinderLaunch.isQuickLaunch
         L10n.configure(language: PreferencesStore().load().language.code)
         super.init()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // FR-506: Services menu entries (see scripts/App-Info.plist).
+        MainActor.assumeIsolated {
+            _ = AppModel.shared
+            UpdateController.shared.start()
+        }
         NSApp.servicesProvider = ServicesProvider.shared
         NSUpdateDynamicServices()
+        UNUserNotificationCenter.current().delegate = self
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+                                withCompletionHandler completionHandler: @escaping () -> Void) {
+        if response.notification.request.identifier == "osz-update" {
+            Task { @MainActor in UpdateController.shared.check() }
+        }
+        completionHandler()
     }
 
     /// File opens (double-click, Dock drop) and `fastzip://` URLs all arrive here.
@@ -21,6 +36,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let links = urls.filter { !$0.isFileURL }
             if !files.isEmpty { model.route(files: files, action: model.prefs.fileAssociation.doubleClick) }
             links.forEach { model.handle(url: $0) }
+        }
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        MainActor.assumeIsolated {
+            let model = AppModel.shared
+            // The inbox consumer may already have drained the posted request.
+            guard !JobInbox.hasPendingRequests, Date().timeIntervalSince(model.lastExternalRequest) > 2 else { return false }
+            model.openDashboardWindow?()
+            return false
         }
     }
 
@@ -75,6 +100,6 @@ final class ServicesProvider: NSObject {
 
     @objc func extractWithFastZip(_ pboard: NSPasteboard, userData: String,
                                   error: AutoreleasingUnsafeMutablePointer<NSString>) {
-        dispatch(.extract(paths: paths(pboard), mode: .smart, deleteArchive: false))
+        dispatch(.extract(paths: paths(pboard), mode: .named, deleteArchive: false))
     }
 }

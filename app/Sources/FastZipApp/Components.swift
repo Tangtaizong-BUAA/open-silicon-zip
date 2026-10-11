@@ -75,9 +75,10 @@ extension URL {
 
 @MainActor
 enum FilePanels {
-    static func chooseFolder(prompt: String = "Choose", message: String? = nil) async -> URL? {
+    static func chooseFolder(prompt: String = "Choose", message: String? = nil, startingAt: URL? = nil) async -> URL? {
         await withCheckedContinuation { (c: CheckedContinuation<URL?, Never>) in
             let p = NSOpenPanel()
+            p.directoryURL = startingAt
             p.canChooseDirectories = true
             p.canChooseFiles = false
             p.canCreateDirectories = true

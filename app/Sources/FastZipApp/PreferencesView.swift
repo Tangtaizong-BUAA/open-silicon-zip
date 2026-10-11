@@ -17,6 +17,7 @@ struct PreferencesView: View {
             ViewTab().tabItem { Label("View/Edit", systemImage: "paintbrush") }
             AdvancedTab().tabItem { Label("Advanced", systemImage: "slider.horizontal.3") }
             SandboxTab().tabItem { Label("Sandbox", systemImage: "lock.shield") }
+            UpdateSettingsView().tabItem { Label("Updates", systemImage: "arrow.down.circle") }
             LanguageTab().tabItem { Label("Language", systemImage: "globe") }
         }
         .frame(width: 600, height: 460)

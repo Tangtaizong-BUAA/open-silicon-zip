@@ -33,18 +33,22 @@
 
 | 功能 | 说明 |
 |---|---|
-| Finder 一级右键菜单 | 直接压缩为 ZIP / 7z，智能解压、解压到当前目录或指定文件夹 |
+| Finder 一级右键菜单 | 指定 ZIP / 7z 时仅显示进度；未指定格式时显示小型选择框；默认解压到独立文件夹 |
 | 多格式支持 | ZIP / ZIPX、7z、TAR 及其压缩流；RAR 和多种旧格式通过读取后端支持 |
 | 原生桌面界面 | SwiftUI，默认简体中文，可切换 English / 繁體中文 |
 | 压缩包管理 | 浏览与预览、ZIP 编辑与修复、任务队列、校验和、加密密码管理 |
 | Apple 芯片优化 | ARM64 Rust 引擎，性能核心感知线程池，按内存预算限制的 7z 并行分块 |
 | 文件安全 | 密码经匿名管道传递，路径穿越与符号链接重定向检查，ZIP 校验后原子覆盖 |
 
+## 自动更新
+
+应用菜单中的“检查更新…”可手动升级；“设置 → 更新”提供后台检查提醒、自动下载安装开关。更新源部署在家庭服务器，清单和安装包均经过 Ed25519 签名校验，运行中的任务会延迟安装和重启。[更新机制与发布流程](docs/UPDATES.md)。
+
 ## 构建与安装
 
 可下载上方预览包，或按以下步骤从源码构建。DMG 内可将应用拖入「Applications」；预览包的签名与扩展限制见下载说明。
 
-**环境要求：** Apple 芯片 Mac、Xcode、Rust 1.94+、Homebrew `xz` 和 [XcodeGen](https://github.com/yonaskolb/XcodeGen)。源码目标为 macOS 13+；打包脚本会根据 liblzma 的实际要求提高最低系统版本，本机验证包为 macOS 15+。
+**环境要求：** Apple 芯片 Mac、Xcode、Rust 1.94+、Homebrew `xz` 和 [XcodeGen](https://github.com/yonaskolb/XcodeGen)。源码及预编译包要求 macOS 15+。
 
 ```sh
 git clone https://github.com/Tangtaizong-BUAA/open-silicon-zip.git
