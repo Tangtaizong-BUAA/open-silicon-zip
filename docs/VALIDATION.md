@@ -30,6 +30,8 @@ The public branch begins with a sanitized source snapshot. Local baseline histor
 
 ## Performance
 
+For the additional same-machine comparison with Bandizip 365, 7-Zip, Info-ZIP and libarchive, see [Benchmark](BENCHMARKS.md). It includes default and high-speed-off modes, archive size, compression/extraction time, memory and all 30 validated round trips.
+
 Compared with the untouched local Git initialization baseline (`66c3202`). Both binaries are native ARM64 release builds. `bench/compare.py` uses an identical seeded 128 MiB corpus (50% text, 25% semi-compressible binary, 25% media-shaped data), alternates baseline/candidate order and reports three-run medians. Every output is tested by the generating engine. The 512 MiB stored-file case uses five measured repetitions after warmup.
 
 | Workload | Baseline MiB/s | Final MiB/s | Baseline peak RSS MiB | Final peak RSS MiB |

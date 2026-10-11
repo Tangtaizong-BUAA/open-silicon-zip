@@ -36,6 +36,20 @@ Copy the app to Applications and launch it. Enable **Open Silicon Zip Finder** i
 
 Local development signatures are **not notarized distribution**. This repository does not claim Developer ID / Gatekeeper acceptance for downloads.
 
+## Benchmark / 性能对照
+
+已在 M4 Max / 48 GiB 上实测本机 **Bandizip 365 7.39、7-Zip 26.04、Info-ZIP 和 libarchive**，同一份 128 MiB 合成数据，每项三轮，30 次压缩和 30 次解压全部通过逐文件 SHA-256 校验。
+
+| 7z 标准压缩 | 压缩秒 | 输出 MiB | 压缩峰值 RSS MiB |
+|---|---:|---:|---:|
+| Open Silicon Zip，关闭高速模式 | 9.983 | 51.15 | 1481.6 |
+| 7-Zip | 36.769 | 50.86 | 379.3 |
+| Bandizip 365 | 35.706 | 50.67 | 600.0 |
+
+本项目在此语料上用更多内存取得更高吞吐，输出略大。默认高速模式会跳过 `.bin` 压缩，因此单独列出，不能混同为相同压缩率。Bandizip 通过官方命令行启动完整应用，包含初始化成本；其他项是 CLI 引擎。详见 **[完整对照、ZIP/7z 解压速度与测试边界](docs/BENCHMARKS.md)**、[原始数据](docs/benchmarks/competitors-m4-max.json)和[复现脚本](bench/competitors.py)。
+
+Measured comparison includes compression/extraction time, archive size and peak RSS. Defaults, compression ratios and process startup costs differ; this is a workload-specific tradeoff, not a universal ranking.
+
 ## Validation
 
 ```sh

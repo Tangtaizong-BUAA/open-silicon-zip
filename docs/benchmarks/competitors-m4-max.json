@@ -1,0 +1,887 @@
+{
+  "schema": 1,
+  "repetitions": 3,
+  "timing": "perf_counter around /usr/bin/time -l process; warm filesystem cache; validation excluded",
+  "rss": "macOS time -l maximum resident set size in bytes, maximum across repeats",
+  "hardware": {
+    "machdep.cpu.brand_string": "Apple M4 Max",
+    "hw.memsize": "51539607552",
+    "hw.perflevel0.physicalcpu": "12",
+    "hw.perflevel1.physicalcpu": "4",
+    "macOS": "15.7.1"
+  },
+  "versions": {
+    "fz_sha256": "25c9634ab98b6fc6f62c234bfdf56486e38352aca41058ff79732cb6c9ca6e7a",
+    "7-Zip": [
+      "7-Zip (z) 26.04 (arm64) : Copyright (c) 1999-2026 Igor Pavlov : 2026-10-05",
+      " 64-bit arm_v:8.5-A locale=C.UTF-8 Threads:16 OPEN_MAX:1048575, ASM",
+      ""
+    ],
+    "libarchive": [
+      "bsdtar 3.5.3 - libarchive 3.7.4 zlib/1.2.12 liblzma/5.4.3 bz2lib/1.0.8"
+    ],
+    "Info-ZIP": [
+      "Copyright (c) 1990-2008 Info-ZIP - Type 'zip \"-L\"' for software license.",
+      "This is Zip 3.0 (July 5th 2008), by Info-ZIP, with modifications by Apple Inc.",
+      "Please report bugs to Apple."
+    ],
+    "UnZip": [
+      "UnZip 6.00 of 20 April 2009, by Info-ZIP, with modifications by Apple Inc.",
+      "Please report bugs to Apple.",
+      ""
+    ],
+    "Bandizip 365": "7.39"
+  },
+  "results": {
+    "osz-zip": {
+      "name": "Open Silicon Zip",
+      "format": "zip",
+      "settings": "normal; default high-speed on, threads auto",
+      "samples": [
+        {
+          "create": {
+            "seconds": 0.16436908300966024,
+            "peak_rss_bytes": 172343296
+          },
+          "extract": {
+            "seconds": 0.16287162504158914,
+            "peak_rss_bytes": 73023488
+          },
+          "archive_bytes": 84952561,
+          "zip_method_input_bytes": {
+            "0": 67108864,
+            "8": 67108864
+          },
+          "sha256_roundtrip": true,
+          "sevenzip_test": true
+        },
+        {
+          "create": {
+            "seconds": 0.17191550001734868,
+            "peak_rss_bytes": 168771584
+          },
+          "extract": {
+            "seconds": 0.15924216696294025,
+            "peak_rss_bytes": 65650688
+          },
+          "archive_bytes": 84952561,
+          "zip_method_input_bytes": {
+            "0": 67108864,
+            "8": 67108864
+          },
+          "sha256_roundtrip": true,
+          "sevenzip_test": true
+        },
+        {
+          "create": {
+            "seconds": 0.16557416698196903,
+            "peak_rss_bytes": 170328064
+          },
+          "extract": {
+            "seconds": 0.1612267920281738,
+            "peak_rss_bytes": 69812224
+          },
+          "archive_bytes": 84952561,
+          "zip_method_input_bytes": {
+            "0": 67108864,
+            "8": 67108864
+          },
+          "sha256_roundtrip": true,
+          "sevenzip_test": true
+        }
+      ],
+      "commands": [
+        [
+          "$FZ",
+          "create",
+          "$WORK/archive.zip",
+          "$WORK/corpus"
+        ],
+        [
+          "$FZ",
+          "extract",
+          "$WORK/archive.zip",
+          "-o",
+          "$WORK/extracted"
+        ]
+      ],
+      "summary": {
+        "create": {
+          "median_seconds": 0.16557416698196903,
+          "peak_rss_bytes": 172343296
+        },
+        "extract": {
+          "median_seconds": 0.1612267920281738,
+          "peak_rss_bytes": 73023488
+        },
+        "archive_bytes": 84952561
+      }
+    },
+    "7zip-zip": {
+      "name": "7-Zip",
+      "format": "zip",
+      "settings": "ZIP -mx=5; automatic threads",
+      "samples": [
+        {
+          "create": {
+            "seconds": 0.7625084579922259,
+            "peak_rss_bytes": 323944448
+          },
+          "extract": {
+            "seconds": 0.30253379204077646,
+            "peak_rss_bytes": 3637248
+          },
+          "archive_bytes": 84368490,
+          "zip_method_input_bytes": {
+            "0": 67108864,
+            "8": 67108864
+          },
+          "sha256_roundtrip": true,
+          "sevenzip_test": true
+        },
+        {
+          "create": {
+            "seconds": 0.889711374999024,
+            "peak_rss_bytes": 329383936
+          },
+          "extract": {
+            "seconds": 0.28438587504206225,
+            "peak_rss_bytes": 3719168
+          },
+          "archive_bytes": 84368490,
+          "zip_method_input_bytes": {
+            "0": 67108864,
+            "8": 67108864
+          },
+          "sha256_roundtrip": true,
+          "sevenzip_test": true
+        },
+        {
+          "create": {
+            "seconds": 2.409078833006788,
+            "peak_rss_bytes": 325189632
+          },
+          "extract": {
+            "seconds": 0.6658502080244943,
+            "peak_rss_bytes": 3702784
+          },
+          "archive_bytes": 84368490,
+          "zip_method_input_bytes": {
+            "0": 67108864,
+            "8": 67108864
+          },
+          "sha256_roundtrip": true,
+          "sevenzip_test": true
+        }
+      ],
+      "commands": [
+        [
+          "/opt/homebrew/bin/7zz",
+          "a",
+          "-tzip",
+          "-mx=5",
+          "$WORK/archive.zip",
+          "corpus"
+        ],
+        [
+          "/opt/homebrew/bin/7zz",
+          "x",
+          "-y",
+          "-o$WORK/extracted",
+          "$WORK/archive.zip"
+        ]
+      ],
+      "summary": {
+        "create": {
+          "median_seconds": 0.889711374999024,
+          "peak_rss_bytes": 329383936
+        },
+        "extract": {
+          "median_seconds": 0.30253379204077646,
+          "peak_rss_bytes": 3719168
+        },
+        "archive_bytes": 84368490
+      }
+    },
+    "infozip-zip": {
+      "name": "Info-ZIP",
+      "format": "zip",
+      "settings": "ZIP -6; recursive; no extra fields",
+      "samples": [
+        {
+          "create": {
+            "seconds": 2.682541874994058,
+            "peak_rss_bytes": 2228224
+          },
+          "extract": {
+            "seconds": 0.5173871670267545,
+            "peak_rss_bytes": 3211264
+          },
+          "archive_bytes": 85147692,
+          "zip_method_input_bytes": {
+            "0": 0,
+            "8": 134217728
+          },
+          "sha256_roundtrip": true,
+          "sevenzip_test": true
+        },
+        {
+          "create": {
+            "seconds": 2.7249826249899343,
+            "peak_rss_bytes": 2473984
+          },
+          "extract": {
+            "seconds": 0.5236307909945026,
+            "peak_rss_bytes": 3211264
+          },
+          "archive_bytes": 85147692,
+          "zip_method_input_bytes": {
+            "0": 0,
+            "8": 134217728
+          },
+          "sha256_roundtrip": true,
+          "sevenzip_test": true
+        },
+        {
+          "create": {
+            "seconds": 2.629653500043787,
+            "peak_rss_bytes": 2441216
+          },
+          "extract": {
+            "seconds": 0.6450618749950081,
+            "peak_rss_bytes": 3178496
+          },
+          "archive_bytes": 85147692,
+          "zip_method_input_bytes": {
+            "0": 0,
+            "8": 134217728
+          },
+          "sha256_roundtrip": true,
+          "sevenzip_test": true
+        }
+      ],
+      "commands": [
+        [
+          "/usr/bin/zip",
+          "-q",
+          "-r",
+          "-6",
+          "-X",
+          "$WORK/archive.zip",
+          "corpus"
+        ],
+        [
+          "/usr/bin/unzip",
+          "-q",
+          "$WORK/archive.zip",
+          "-d",
+          "$WORK/extracted"
+        ]
+      ],
+      "summary": {
+        "create": {
+          "median_seconds": 2.682541874994058,
+          "peak_rss_bytes": 2473984
+        },
+        "extract": {
+          "median_seconds": 0.5236307909945026,
+          "peak_rss_bytes": 3211264
+        },
+        "archive_bytes": 85147692
+      }
+    },
+    "libarchive-zip": {
+      "name": "libarchive / bsdtar",
+      "format": "zip",
+      "settings": "ZIP default Deflate; no macOS metadata",
+      "samples": [
+        {
+          "create": {
+            "seconds": 2.5569012500345707,
+            "peak_rss_bytes": 6848512
+          },
+          "extract": {
+            "seconds": 0.11908449995098636,
+            "peak_rss_bytes": 3866624
+          },
+          "archive_bytes": 85174524,
+          "zip_method_input_bytes": {
+            "0": 0,
+            "8": 134217728
+          },
+          "sha256_roundtrip": true,
+          "sevenzip_test": true
+        },
+        {
+          "create": {
+            "seconds": 2.607653334038332,
+            "peak_rss_bytes": 7208960
+          },
+          "extract": {
+            "seconds": 0.1210834999801591,
+            "peak_rss_bytes": 4161536
+          },
+          "archive_bytes": 85174524,
+          "zip_method_input_bytes": {
+            "0": 0,
+            "8": 134217728
+          },
+          "sha256_roundtrip": true,
+          "sevenzip_test": true
+        },
+        {
+          "create": {
+            "seconds": 2.573188250011299,
+            "peak_rss_bytes": 7241728
+          },
+          "extract": {
+            "seconds": 0.15427125000860542,
+            "peak_rss_bytes": 3932160
+          },
+          "archive_bytes": 85174524,
+          "zip_method_input_bytes": {
+            "0": 0,
+            "8": 134217728
+          },
+          "sha256_roundtrip": true,
+          "sevenzip_test": true
+        }
+      ],
+      "commands": [
+        [
+          "/usr/bin/bsdtar",
+          "--no-mac-metadata",
+          "--format",
+          "zip",
+          "-cf",
+          "$WORK/archive.zip",
+          "corpus"
+        ],
+        [
+          "/usr/bin/bsdtar",
+          "-xf",
+          "$WORK/archive.zip",
+          "-C",
+          "$WORK/extracted"
+        ]
+      ],
+      "summary": {
+        "create": {
+          "median_seconds": 2.573188250011299,
+          "peak_rss_bytes": 7241728
+        },
+        "extract": {
+          "median_seconds": 0.1210834999801591,
+          "peak_rss_bytes": 4161536
+        },
+        "archive_bytes": 85174524
+      }
+    },
+    "osz-7z": {
+      "name": "Open Silicon Zip",
+      "format": "7z",
+      "settings": "normal; default high-speed on, adaptive solid blocks, threads auto",
+      "samples": [
+        {
+          "create": {
+            "seconds": 10.45084304100601,
+            "peak_rss_bytes": 747978752
+          },
+          "extract": {
+            "seconds": 0.31305529101518914,
+            "peak_rss_bytes": 107790336
+          },
+          "archive_bytes": 82453213,
+          "zip_method_input_bytes": null,
+          "sha256_roundtrip": true,
+          "sevenzip_test": true
+        },
+        {
+          "create": {
+            "seconds": 10.455998999997973,
+            "peak_rss_bytes": 749060096
+          },
+          "extract": {
+            "seconds": 0.31669100001454353,
+            "peak_rss_bytes": 103104512
+          },
+          "archive_bytes": 82453213,
+          "zip_method_input_bytes": null,
+          "sha256_roundtrip": true,
+          "sevenzip_test": true
+        },
+        {
+          "create": {
+            "seconds": 10.448988792020828,
+            "peak_rss_bytes": 748093440
+          },
+          "extract": {
+            "seconds": 0.3172109170118347,
+            "peak_rss_bytes": 103186432
+          },
+          "archive_bytes": 82453213,
+          "zip_method_input_bytes": null,
+          "sha256_roundtrip": true,
+          "sevenzip_test": true
+        }
+      ],
+      "commands": [
+        [
+          "$FZ",
+          "create",
+          "$WORK/archive.7z",
+          "$WORK/corpus"
+        ],
+        [
+          "$FZ",
+          "extract",
+          "$WORK/archive.7z",
+          "-o",
+          "$WORK/extracted"
+        ]
+      ],
+      "summary": {
+        "create": {
+          "median_seconds": 10.45084304100601,
+          "peak_rss_bytes": 749060096
+        },
+        "extract": {
+          "median_seconds": 0.31669100001454353,
+          "peak_rss_bytes": 107790336
+        },
+        "archive_bytes": 82453213
+      }
+    },
+    "7zip-7z": {
+      "name": "7-Zip",
+      "format": "7z",
+      "settings": "7z -mx=5; default solid and automatic threads",
+      "samples": [
+        {
+          "create": {
+            "seconds": 36.769276749982964,
+            "peak_rss_bytes": 397688832
+          },
+          "extract": {
+            "seconds": 0.5949370000162162,
+            "peak_rss_bytes": 194101248
+          },
+          "archive_bytes": 53326410,
+          "zip_method_input_bytes": null,
+          "sha256_roundtrip": true,
+          "sevenzip_test": true
+        },
+        {
+          "create": {
+            "seconds": 36.5560988340294,
+            "peak_rss_bytes": 397737984
+          },
+          "extract": {
+            "seconds": 0.5859015000169165,
+            "peak_rss_bytes": 194248704
+          },
+          "archive_bytes": 53326410,
+          "zip_method_input_bytes": null,
+          "sha256_roundtrip": true,
+          "sevenzip_test": true
+        },
+        {
+          "create": {
+            "seconds": 37.07212550000986,
+            "peak_rss_bytes": 397672448
+          },
+          "extract": {
+            "seconds": 0.6085552500444464,
+            "peak_rss_bytes": 194101248
+          },
+          "archive_bytes": 53326410,
+          "zip_method_input_bytes": null,
+          "sha256_roundtrip": true,
+          "sevenzip_test": true
+        }
+      ],
+      "commands": [
+        [
+          "/opt/homebrew/bin/7zz",
+          "a",
+          "-t7z",
+          "-mx=5",
+          "$WORK/archive.7z",
+          "corpus"
+        ],
+        [
+          "/opt/homebrew/bin/7zz",
+          "x",
+          "-y",
+          "-o$WORK/extracted",
+          "$WORK/archive.7z"
+        ]
+      ],
+      "summary": {
+        "create": {
+          "median_seconds": 36.769276749982964,
+          "peak_rss_bytes": 397737984
+        },
+        "extract": {
+          "median_seconds": 0.5949370000162162,
+          "peak_rss_bytes": 194248704
+        },
+        "archive_bytes": 53326410
+      }
+    },
+    "bandizip-zip": {
+      "name": "Bandizip 365",
+      "format": "zip",
+      "settings": "official CLI c -l:5 -y -storeroot:yes; includes application startup",
+      "samples": [
+        {
+          "create": {
+            "seconds": 0.7651682499563321,
+            "peak_rss_bytes": 99385344
+          },
+          "extract": {
+            "seconds": 0.654294417006895,
+            "peak_rss_bytes": 96010240
+          },
+          "archive_bytes": 85552200,
+          "zip_method_input_bytes": {
+            "0": 0,
+            "8": 134217728
+          },
+          "sha256_roundtrip": true,
+          "sevenzip_test": true
+        },
+        {
+          "create": {
+            "seconds": 0.8822812910075299,
+            "peak_rss_bytes": 98861056
+          },
+          "extract": {
+            "seconds": 0.6830445420346223,
+            "peak_rss_bytes": 94142464
+          },
+          "archive_bytes": 85552200,
+          "zip_method_input_bytes": {
+            "0": 0,
+            "8": 134217728
+          },
+          "sha256_roundtrip": true,
+          "sevenzip_test": true
+        },
+        {
+          "create": {
+            "seconds": 0.9404058750369586,
+            "peak_rss_bytes": 97484800
+          },
+          "extract": {
+            "seconds": 1.4929998749867082,
+            "peak_rss_bytes": 95633408
+          },
+          "archive_bytes": 85552200,
+          "zip_method_input_bytes": {
+            "0": 0,
+            "8": 134217728
+          },
+          "sha256_roundtrip": true,
+          "sevenzip_test": true
+        }
+      ],
+      "commands": [
+        [
+          "/Applications/Bandizip365.app/Contents/MacOS/Bandizip365",
+          "c",
+          "-y",
+          "-l:5",
+          "-storeroot:yes",
+          "$WORK/archive.zip",
+          "$WORK/corpus"
+        ],
+        [
+          "/Applications/Bandizip365.app/Contents/MacOS/Bandizip365",
+          "x",
+          "-y",
+          "-o:$WORK/extracted",
+          "$WORK/archive.zip"
+        ]
+      ],
+      "summary": {
+        "create": {
+          "median_seconds": 0.8822812910075299,
+          "peak_rss_bytes": 99385344
+        },
+        "extract": {
+          "median_seconds": 0.6830445420346223,
+          "peak_rss_bytes": 96010240
+        },
+        "archive_bytes": 85552200
+      }
+    },
+    "bandizip-7z": {
+      "name": "Bandizip 365",
+      "format": "7z",
+      "settings": "official CLI c -l:5 -y -storeroot:yes; includes application startup",
+      "samples": [
+        {
+          "create": {
+            "seconds": 35.70630183303729,
+            "peak_rss_bytes": 627572736
+          },
+          "extract": {
+            "seconds": 1.1057844589813612,
+            "peak_rss_bytes": 283672576
+          },
+          "archive_bytes": 53129502,
+          "zip_method_input_bytes": null,
+          "sha256_roundtrip": true,
+          "sevenzip_test": true
+        },
+        {
+          "create": {
+            "seconds": 34.47250916599296,
+            "peak_rss_bytes": 627654656
+          },
+          "extract": {
+            "seconds": 1.1330564160016365,
+            "peak_rss_bytes": 281133056
+          },
+          "archive_bytes": 53129502,
+          "zip_method_input_bytes": null,
+          "sha256_roundtrip": true,
+          "sevenzip_test": true
+        },
+        {
+          "create": {
+            "seconds": 40.10299920797115,
+            "peak_rss_bytes": 629112832
+          },
+          "extract": {
+            "seconds": 1.2746562500251457,
+            "peak_rss_bytes": 285360128
+          },
+          "archive_bytes": 53129502,
+          "zip_method_input_bytes": null,
+          "sha256_roundtrip": true,
+          "sevenzip_test": true
+        }
+      ],
+      "commands": [
+        [
+          "/Applications/Bandizip365.app/Contents/MacOS/Bandizip365",
+          "c",
+          "-y",
+          "-l:5",
+          "-storeroot:yes",
+          "$WORK/archive.7z",
+          "$WORK/corpus"
+        ],
+        [
+          "/Applications/Bandizip365.app/Contents/MacOS/Bandizip365",
+          "x",
+          "-y",
+          "-o:$WORK/extracted",
+          "$WORK/archive.7z"
+        ]
+      ],
+      "summary": {
+        "create": {
+          "median_seconds": 35.70630183303729,
+          "peak_rss_bytes": 629112832
+        },
+        "extract": {
+          "median_seconds": 1.1330564160016365,
+          "peak_rss_bytes": 285360128
+        },
+        "archive_bytes": 53129502
+      }
+    },
+    "osz-zip-full": {
+      "name": "Open Silicon Zip (high-speed off)",
+      "format": "zip",
+      "settings": "normal; --high-speed off; automatic threads",
+      "samples": [
+        {
+          "create": {
+            "seconds": 0.16622191696660593,
+            "peak_rss_bytes": 175915008
+          },
+          "extract": {
+            "seconds": 0.16053787502460182,
+            "peak_rss_bytes": 67387392
+          },
+          "archive_bytes": 84952561,
+          "zip_method_input_bytes": {
+            "0": 67108864,
+            "8": 67108864
+          },
+          "sha256_roundtrip": true,
+          "sevenzip_test": true
+        },
+        {
+          "create": {
+            "seconds": 0.31629899999825284,
+            "peak_rss_bytes": 175161344
+          },
+          "extract": {
+            "seconds": 0.16406958299921826,
+            "peak_rss_bytes": 63406080
+          },
+          "archive_bytes": 84952561,
+          "zip_method_input_bytes": {
+            "0": 67108864,
+            "8": 67108864
+          },
+          "sha256_roundtrip": true,
+          "sevenzip_test": true
+        },
+        {
+          "create": {
+            "seconds": 0.3138667920138687,
+            "peak_rss_bytes": 178405376
+          },
+          "extract": {
+            "seconds": 0.16448358300840482,
+            "peak_rss_bytes": 72269824
+          },
+          "archive_bytes": 84952561,
+          "zip_method_input_bytes": {
+            "0": 67108864,
+            "8": 67108864
+          },
+          "sha256_roundtrip": true,
+          "sevenzip_test": true
+        }
+      ],
+      "commands": [
+        [
+          "$FZ",
+          "create",
+          "$WORK/archive.zip",
+          "$WORK/corpus",
+          "--high-speed",
+          "off"
+        ],
+        [
+          "$FZ",
+          "extract",
+          "$WORK/archive.zip",
+          "-o",
+          "$WORK/extracted"
+        ]
+      ],
+      "summary": {
+        "create": {
+          "median_seconds": 0.3138667920138687,
+          "peak_rss_bytes": 178405376
+        },
+        "extract": {
+          "median_seconds": 0.16406958299921826,
+          "peak_rss_bytes": 72269824
+        },
+        "archive_bytes": 84952561
+      }
+    },
+    "osz-7z-full": {
+      "name": "Open Silicon Zip (high-speed off)",
+      "format": "7z",
+      "settings": "normal; --high-speed off; adaptive solid blocks, automatic threads",
+      "samples": [
+        {
+          "create": {
+            "seconds": 7.5356042080093175,
+            "peak_rss_bytes": 1553580032
+          },
+          "extract": {
+            "seconds": 0.32245408301241696,
+            "peak_rss_bytes": 179978240
+          },
+          "archive_bytes": 53638204,
+          "zip_method_input_bytes": null,
+          "sha256_roundtrip": true,
+          "sevenzip_test": true
+        },
+        {
+          "create": {
+            "seconds": 9.98336495802505,
+            "peak_rss_bytes": 1548828672
+          },
+          "extract": {
+            "seconds": 0.16358804103219882,
+            "peak_rss_bytes": 176242688
+          },
+          "archive_bytes": 53638204,
+          "zip_method_input_bytes": null,
+          "sha256_roundtrip": true,
+          "sevenzip_test": true
+        },
+        {
+          "create": {
+            "seconds": 10.626553499954753,
+            "peak_rss_bytes": 1546469376
+          },
+          "extract": {
+            "seconds": 0.16358241700800136,
+            "peak_rss_bytes": 173850624
+          },
+          "archive_bytes": 53638204,
+          "zip_method_input_bytes": null,
+          "sha256_roundtrip": true,
+          "sevenzip_test": true
+        }
+      ],
+      "commands": [
+        [
+          "$FZ",
+          "create",
+          "$WORK/archive.7z",
+          "$WORK/corpus",
+          "--high-speed",
+          "off"
+        ],
+        [
+          "$FZ",
+          "extract",
+          "$WORK/archive.7z",
+          "-o",
+          "$WORK/extracted"
+        ]
+      ],
+      "summary": {
+        "create": {
+          "median_seconds": 9.98336495802505,
+          "peak_rss_bytes": 1553580032
+        },
+        "extract": {
+          "median_seconds": 0.16358804103219882,
+          "peak_rss_bytes": 179978240
+        },
+        "archive_bytes": 53638204
+      }
+    }
+  },
+  "input_bytes": 134217728,
+  "corpus_sha256": "f57346b3d68079c621e4ed9ec9dc9265d8fed1cb6b7e5afa00b4fc41cbc0cf15",
+  "measurement_date": "2026-10-11",
+  "engine_source_revision": "180df65fa087db212668e557437865bf5cb8beba",
+  "sessions": [
+    {
+      "cases": [
+        "osz-zip",
+        "7zip-zip",
+        "infozip-zip",
+        "libarchive-zip",
+        "osz-7z",
+        "7zip-7z",
+        "bandizip-zip",
+        "bandizip-7z"
+      ],
+      "order": "rotate left by round, no warmup excluded"
+    },
+    {
+      "cases": [
+        "osz-zip-full",
+        "osz-7z-full"
+      ],
+      "order": "supplemental session after main group; rotate left by round"
+    }
+  ]
+}
