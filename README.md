@@ -1,71 +1,115 @@
-# open-silicon-zip
+# Open Silicon Zip
 
-为 Apple 芯片 Mac 开发的原生压缩与解压工具。SwiftUI 界面、Rust 引擎，默认简体中文，可在设置中切换 English 或繁體中文。
+**面向 Apple 芯片 Mac 的开源压缩软件，提供原生中文界面、Finder 右键操作和多核并行压缩。**
 
-Native macOS archiver for Apple silicon, with a SwiftUI interface and a Rust engine. Chinese by default; English and Traditional Chinese are selectable in Settings → Language. Restart after changing the interface language.
+[![CI](https://github.com/Tangtaizong-BUAA/open-silicon-zip/actions/workflows/ci.yml/badge.svg)](https://github.com/Tangtaizong-BUAA/open-silicon-zip/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Apple Silicon](https://img.shields.io/badge/macOS-Apple_Silicon-111827)](#构建与安装)
 
-## 功能 / Features
+[性能实测](#性能实测) · [功能](#功能) · [构建与安装](#构建与安装) · [开发与贡献](#开发与贡献) · [安全说明](SECURITY.md)
 
-- Finder 一级右键菜单：直接压缩为 ZIP / 7z，智能解压、解压到当前目录或指定文件夹。
-- ZIP/ZIPX、7z、TAR 及其压缩流；RAR 和多种旧格式通过读取后端支持。
-- 压缩包浏览与预览、ZIP 编辑与修复、任务队列、校验和、加密密码管理。
-- ARM64 原生构建、性能核心感知线程池、按内存预算限制的 7z 并行分块、随应用打包的 liblzma、较小的大文件缓冲区。
-- 密码经匿名管道传递；拒绝目录穿越与符号链接重定向；ZIP 覆盖文件在校验通过后原子提交。
+## 性能实测
 
-安装后请在系统设置中启用 **Open Silicon Zip Finder** 扩展；设置 → 语言可以切换中英文，重启生效。7z 暂不存储符号链接：可选用 ZIP/TAR 保留链接，或在压缩设置中明确选择读取链接目标。
+在 **M4 Max / 48 GiB** 上，与本机 **Bandizip 365、7-Zip、Info-ZIP、libarchive** 使用同一份 128 MiB 合成数据比较；每项三轮，全部 **30 次压缩和 30 次解压**通过逐文件 SHA-256 校验。
 
-## Build
+**绿色 + 粗体：该列最优。浅蓝色：第二优。↓ 越低越好。** ZIP 与 7z 分开比较；不设置综合分数。
 
-Sources target macOS 13+ on Apple silicon. Building requires Xcode, Rust 1.94+, Homebrew `xz` and [XcodeGen](https://github.com/yonaskolb/XcodeGen). The default binary also links the system libarchive. Internal Swift targets retain their original `FastZip` names; the product and bundle identifiers are Open Silicon Zip / `org.opensiliconzip.mac`.
+[![ZIP 与 7z 性能对照：每列最优值加粗标绿，第二优标蓝；覆盖压缩时间、解压时间、输出大小及峰值内存。](docs/benchmarks/comparison.svg)](docs/BENCHMARKS.md)
+
+- **速度与内存取舍：** 在此语料上，关闭高速模式的 7z 压缩约 10.0 秒；7-Zip 约 36.8 秒，Bandizip 约 35.7 秒。本项目峰值 RSS 约 1.45 GiB，更高；输出比后两者分别大约 0.58% 和 0.96%。
+- **默认策略单独列出：** 高速模式会按扩展名直接存储 `.bin` 和 `.mp4`，这份数据中的 `.bin` 可压缩，因此默认模式的包明显更大。
+- **计时边界：** Bandizip 通过官方命令行启动完整应用，包含初始化成本；其余行是 CLI 引擎。各软件保留默认线程、字典与分块策略；解压各自生成的包。结果代表这次工作负载，不是所有场景的排名。
+
+[完整报告与可复制表格](docs/BENCHMARKS.md) · [原始样本 JSON](docs/benchmarks/competitors-m4-max.json) · [复现脚本](bench/competitors.py) · [优化前后对照](docs/VALIDATION.md#performance)
+
+## 功能
+
+| 功能 | 说明 |
+|---|---|
+| Finder 一级右键菜单 | 直接压缩为 ZIP / 7z，智能解压、解压到当前目录或指定文件夹 |
+| 多格式支持 | ZIP / ZIPX、7z、TAR 及其压缩流；RAR 和多种旧格式通过读取后端支持 |
+| 原生桌面界面 | SwiftUI，默认简体中文，可切换 English / 繁體中文 |
+| 压缩包管理 | 浏览与预览、ZIP 编辑与修复、任务队列、校验和、加密密码管理 |
+| Apple 芯片优化 | ARM64 Rust 引擎，性能核心感知线程池，按内存预算限制的 7z 并行分块 |
+| 文件安全 | 密码经匿名管道传递，路径穿越与符号链接重定向检查，ZIP 校验后原子覆盖 |
+
+## 构建与安装
+
+当前提供源码构建，尚未提供经 Developer ID 签名、公证的安装包。
+
+**环境要求：** Apple 芯片 Mac、Xcode、Rust 1.94+、Homebrew `xz` 和 [XcodeGen](https://github.com/yonaskolb/XcodeGen)。源码目标为 macOS 13+；打包脚本会根据 liblzma 的实际要求提高最低系统版本，本机验证包为 macOS 15+。
 
 ```sh
-cargo build --locked --release --manifest-path engine/fz-core/Cargo.toml
-swift test --package-path app
+git clone https://github.com/Tangtaizong-BUAA/open-silicon-zip.git
+cd open-silicon-zip
+brew install xz xcodegen
 bash app/package-app.sh
 ```
 
-The packaged minimum macOS version is raised when the bundled liblzma requires a newer OS (the locally validated build requires macOS 15+).
+生成位置：`app/dist-stage/Open Silicon Zip.app`。复制到「应用程序」并启动，然后在 **系统设置 → 通用 → 登录项与扩展 → Finder 扩展**中启用 **Open Silicon Zip Finder**。
 
-The app is written to `app/dist-stage/Open Silicon Zip.app`. The packaging script builds from source and verifies nested code signatures. It does not install the app or restart Finder. It defaults to ad-hoc signing; set `SIGN_IDENTITY` to your own valid signing identity for a locally signed Finder extension:
+打包默认使用 ad-hoc 签名。需要本地签名的 Finder 扩展时，使用你自己的有效签名身份：
 
 ```sh
 SIGN_IDENTITY='Apple Development: YOUR IDENTITY' bash app/package-app.sh
 ```
 
-Copy the app to Applications and launch it. Enable **Open Silicon Zip Finder** in System Settings → General → Login Items & Extensions → Finder Extensions. If Finder cached an older extension, relaunch Finder after enabling it. Settings → Finder Menu controls the menu layout; direct actions are the default. Cloud-provider-managed folders may have separate Finder behavior.
+若 Finder 缓存了旧扩展，可在启用后重新启动 Finder。菜单布局可在应用设置中调整；中英文切换位于「设置 → 语言」，重启生效。云盘托管目录的菜单行为可能不同。内部 Swift target 仍保留 `FastZip` 名称，产品 bundle ID 为 `org.opensiliconzip.mac`。
 
-Local development signatures are **not notarized distribution**. This repository does not claim Developer ID / Gatekeeper acceptance for downloads.
+<details>
+<summary>只构建并使用命令行引擎</summary>
 
-## Benchmark / 性能对照
+```sh
+cargo build --locked --release --manifest-path engine/fz-core/Cargo.toml
 
-已在 M4 Max / 48 GiB 上实测本机 **Bandizip 365 7.39、7-Zip 26.04、Info-ZIP 和 libarchive**，同一份 128 MiB 合成数据，每项三轮，30 次压缩和 30 次解压全部通过逐文件 SHA-256 校验。
+# 压缩与解压
+engine/fz-core/target/release/fz create output.zip /path/to/folder
+engine/fz-core/target/release/fz extract output.zip -o /path/to/output
 
-| 7z 标准压缩 | 压缩秒 | 输出 MiB | 压缩峰值 RSS MiB |
-|---|---:|---:|---:|
-| Open Silicon Zip，关闭高速模式 | 9.983 | 51.15 | 1481.6 |
-| 7-Zip | 36.769 | 50.86 | 379.3 |
-| Bandizip 365 | 35.706 | 50.67 | 600.0 |
+# 充分压缩 .bin 等默认跳过的扩展名
+engine/fz-core/target/release/fz create output.7z /path/to/folder --high-speed off
+```
 
-本项目在此语料上用更多内存取得更高吞吐，输出略大。默认高速模式会跳过 `.bin` 压缩，因此单独列出，不能混同为相同压缩率。Bandizip 通过官方命令行启动完整应用，包含初始化成本；其他项是 CLI 引擎。详见 **[完整对照、ZIP/7z 解压速度与测试边界](docs/BENCHMARKS.md)**、[原始数据](docs/benchmarks/competitors-m4-max.json)和[复现脚本](bench/competitors.py)。
+7z 暂不存储符号链接；可用 ZIP / TAR 保留链接，或明确选择 `--dereference` 读取目标。
 
-Measured comparison includes compression/extraction time, archive size and peak RSS. Defaults, compression ratios and process startup costs differ; this is a workload-specific tradeoff, not a universal ranking.
+</details>
 
-## Validation
+## 开发与贡献
+
+欢迎提交可复现的问题和 Pull Request。报告问题时请包含 macOS / 芯片型号、压缩格式、复现步骤及经过脱敏的日志；尽量提供可公开的最小合成样本。安全问题请参照 [SECURITY.md](SECURITY.md) 私下报告。
+
+| 目录 | 内容 |
+|---|---|
+| `app/` | SwiftUI 应用、Finder 扩展与 Swift 测试 |
+| `engine/fz-core/` | Rust 压缩引擎和命令行工具 |
+| `bench/` | 基准运行、对照和图表生成脚本 |
+| `scripts/`、`compat-suite/` | 安全、汉化和格式兼容验证 |
+| `docs/` | 验证报告、Benchmark 与原始测量数据 |
+
+提交修改前运行相关验证：
 
 ```sh
 RUST_TEST_THREADS=1 cargo test --locked --release --manifest-path engine/fz-core/Cargo.toml
 swift test --package-path app
+cargo build --locked --release --manifest-path engine/fz-core/Cargo.toml
 python3 scripts/security-regression.py
 python3 scripts/check-localization.py
-# With cargo-audit installed:
-cargo audit --file engine/fz-core/Cargo.lock
-# Same corpus, alternating binary order, three repetitions:
-python3 bench/compare.py /path/to/baseline/fz engine/fz-core/target/release/fz
-python3 bench/large-store.py /path/to/baseline/fz engine/fz-core/target/release/fz
 ```
 
-See [validation](docs/VALIDATION.md), [security boundaries](SECURITY.md), and [dependency licenses](THIRD_PARTY_NOTICES.md). Optional external-format fixtures are skipped when their tools are unavailable; those skips are not compatibility passes.
+性能修改应附上同一数据集的耗时、输出大小和内存对照，避免只报告单一速度指标。可安装 `sevenzip` 后运行：
 
-## License
+```sh
+python3 bench/competitors.py --output competitors.json
+# 图表生成另需 matplotlib：
+python3 bench/render.py
+```
 
-Original code is MIT licensed. Vendored `sevenz-rust2` retains its Apache-2.0 license. RAR support includes UnRAR under its own license, including restrictions on re-creating the RAR compression algorithm; the MIT license does not override dependency terms. See `THIRD_PARTY_NOTICES.md`.
+验证覆盖范围、外部工具缺失导致的跳过项，以及未运行的大文件测试，均记录在 [VALIDATION.md](docs/VALIDATION.md)。安全边界见 [SECURITY.md](SECURITY.md)，不将有限测试等同于不存在漏洞。
+
+## 许可证
+
+本项目原创代码使用 [MIT License](LICENSE)。Vendored `sevenz-rust2` 保留 Apache-2.0 许可证；RAR 读取包含 UnRAR，其许可证对重建 RAR 压缩算法等另有约束，MIT 不覆盖这些依赖条款。完整说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+
+---
+
+**Open Silicon Zip is an open-source macOS archiver for Apple silicon, with a native interface, Finder context-menu actions and parallel compression.** English is available in Settings → Language.
