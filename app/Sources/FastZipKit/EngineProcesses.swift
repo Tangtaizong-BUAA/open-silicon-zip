@@ -6,12 +6,11 @@ public enum EngineProcesses {
     private static var processes: [ObjectIdentifier: Process] = [:]
     private static var shuttingDown = false
 
-    static func register(_ process: Process) {
-        lock.lock()
+    static func launch(_ process: Process) throws {
+        lock.lock(); defer { lock.unlock() }
+        guard !shuttingDown else { throw FZError(code: .cancelled) }
+        try process.run()
         processes[ObjectIdentifier(process)] = process
-        let stop = shuttingDown
-        lock.unlock()
-        if stop { terminate(process) }
     }
 
     static func unregister(_ process: Process) {
@@ -31,6 +30,10 @@ public enum EngineProcesses {
         let children = Array(processes.values)
         lock.unlock()
         children.forEach(terminate)
+        let deadline = Date().addingTimeInterval(2)
+        while children.contains(where: \.isRunning) && Date() < deadline { Thread.sleep(forTimeInterval: 0.01) }
+        for child in children where child.isRunning { kill(child.processIdentifier, SIGKILL) }
+        for child in children where child.isRunning { child.waitUntilExit() }
     }
 
     private static func terminate(_ process: Process) {

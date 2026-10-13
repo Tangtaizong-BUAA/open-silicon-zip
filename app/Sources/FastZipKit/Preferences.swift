@@ -247,7 +247,11 @@ public struct PreferencesStore: Sendable {
     }
 
     public func importFile(_ url: URL) throws -> Preferences {
-        let prefs = try Self.decode(Data(contentsOf: url))
+        var prefs = try Self.decode(Data(contentsOf: url))
+        // An imported configuration is data, not authorization to execute a new
+        // program (which would also receive future archive passwords on stdin).
+        // Only the local Advanced preference can change the engine executable.
+        prefs.advanced.enginePath = load().advanced.enginePath
         try save(prefs)
         return prefs
     }

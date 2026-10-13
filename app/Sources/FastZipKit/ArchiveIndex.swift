@@ -21,11 +21,36 @@ public struct ArchiveIndex: Sendable {
     private var byParent: [String: [ArchiveEntry]] = [:]
     private var folderSizes: [String: (size: UInt64, csize: UInt64)] = [:]
     public private(set) var root: [FolderNode] = []
+    public let totalSize: UInt64
 
-    public init(entries: [ArchiveEntry]) {
+    public init() { entries = []; totalSize = 0 }
+
+    public init(entries: [ArchiveEntry]) throws {
         self.entries = entries
+        var budget = ArchiveListingBudget()
+        var size: UInt64 = 0
+        var compressedSize: UInt64 = 0
+        // Check all names and totals before allocating cumulative path prefixes.
+        for entry in entries {
+            try budget.admit(entry)
+            if !entry.isDirectory {
+                size = try ArchiveListingBudget.adding(size, entry.size)
+                compressedSize = try ArchiveListingBudget.adding(compressedSize, entry.compressedSize)
+            }
+        }
+        totalSize = size
         var dirs: [String: ArchiveEntry] = [:]
         var files: [ArchiveEntry] = []
+        var expandedPathBytes = 0
+
+        func admitDirectory(_ path: String) throws {
+            guard dirs[path] == nil else { return }
+            guard dirs.count < ArchiveListingBudget.maximumDirectoryNodes,
+                  path.utf8.count <= ArchiveListingBudget.maximumExpandedPathBytes - expandedPathBytes else {
+                throw ArchiveListingBudget.limitError()
+            }
+            expandedPathBytes += path.utf8.count
+        }
 
         for e in entries {
             let comps = e.components
@@ -36,12 +61,16 @@ public struct ArchiveIndex: Sendable {
             if comps.count > 1 {
                 for i in 1..<comps.count {
                     let p = comps[0..<i].joined(separator: "/")
-                    if dirs[p] == nil { dirs[p] = ArchiveEntry(name: p, isDirectory: true) }
+                    if dirs[p] == nil {
+                        try admitDirectory(p)
+                        dirs[p] = ArchiveEntry(name: p, isDirectory: true)
+                    }
                 }
             }
             if e.isDirectory {
                 var d = normalized
                 d.isDirectory = true
+                try admitDirectory(d.name)
                 dirs[d.name] = d
             } else {
                 files.append(normalized)
@@ -49,7 +78,8 @@ public struct ArchiveIndex: Sendable {
                 while !p.isEmpty {
                     let key = p.joined(separator: "/")
                     let cur = folderSizes[key] ?? (size: 0, csize: 0)
-                    folderSizes[key] = (size: cur.size + e.size, csize: cur.csize + e.compressedSize)
+                    folderSizes[key] = (size: try ArchiveListingBudget.adding(cur.size, e.size),
+                                        csize: try ArchiveListingBudget.adding(cur.csize, e.compressedSize))
                     p = p.dropLast()
                 }
             }
@@ -93,7 +123,6 @@ public struct ArchiveIndex: Sendable {
     }
 
     public var totalFileCount: Int { entries.filter { !$0.isDirectory }.count }
-    public var totalSize: UInt64 { entries.reduce(0) { $0 + ($1.isDirectory ? 0 : $1.size) } }
 
     /// Archive-relative paths to hand to `fz extract` for a selection (folders expand to their prefix).
     public static func extractionPaths(for selection: [ArchiveEntry]) -> [String] {

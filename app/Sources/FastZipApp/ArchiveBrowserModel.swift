@@ -50,7 +50,7 @@ final class BrowserModel: ObservableObject {
 
     let url: URL
     @Published private(set) var state: LoadState = .loading
-    @Published private(set) var index = ArchiveIndex(entries: [])
+    @Published private(set) var index = ArchiveIndex()
     @Published private(set) var visible: [ArchiveEntry] = []
     @Published var codepage: CodePage = CodePageCatalog.auto
     @Published var currentFolder = "" { didSet { if oldValue != currentFolder { selection = []; refresh() } } }
@@ -88,7 +88,7 @@ final class BrowserModel: ObservableObject {
         do {
             let session = try await app.openSession(url, codepage: codepage.id, password: password)
             password = session.password
-            let built = await Task.detached { ArchiveIndex(entries: session.entries) }.value
+            let built = try await Task.detached { try ArchiveIndex(entries: session.entries) }.value
             index = built
             state = .ready
             refresh()

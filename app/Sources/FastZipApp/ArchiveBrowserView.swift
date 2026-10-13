@@ -26,6 +26,7 @@ struct ArchiveBrowserView: View {
         .searchable(text: $model.search, prompt: L10n.t("Search in archive"))
         .task(id: model.search) { await model.runSearch() }
         .task { await model.load(using: app) }
+        .onDisappear { app.releaseOpenFiles(for: url) }
         .toolbar { toolbar }
         .frame(minWidth: 760, minHeight: 440)
         .onChange(of: selectedFolder) { newValue in

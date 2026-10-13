@@ -52,7 +52,8 @@ public final class ProcessEngineClient: EngineClient, @unchecked Sendable {
         return EngineRun(events: stream,
                          pause: { control.pause() },
                          resume: { control.resume() },
-                         cancel: { control.cancel() })
+                         cancel: { control.cancel() },
+                         waitForTermination: { await control.waitForTermination() })
     }
 
     private static func run(executable: URL, arguments: [String], input: Data?, environment: [String: String]?,
@@ -71,18 +72,19 @@ public final class ProcessEngineClient: EngineClient, @unchecked Sendable {
 
         let (exitStream, exitContinuation) = AsyncStream<Int32>.makeStream()
         process.terminationHandler = { p in
+            control.didTerminate()
             exitContinuation.yield(p.terminationStatus)
             exitContinuation.finish()
         }
 
         do {
-            try process.run()
+            try EngineProcesses.launch(process)
         } catch {
+            control.didTerminate()
             continuation.finish(throwing: FZError(code: .engineMissing,
                                                   message: "\(executable.path): \(error.localizedDescription)"))
             return
         }
-        EngineProcesses.register(process)
         defer { EngineProcesses.unregister(process) }
         control.attach(process)
         if let inputPipe, let input {
@@ -154,6 +156,25 @@ final class ProcessControl: @unchecked Sendable {
     private var process: Process?
     private var paused = false
     private var cancelled = false
+    private var terminated = false
+    private var terminationWaiters: [CheckedContinuation<Void, Never>] = []
+
+    func waitForTermination() async {
+        await withCheckedContinuation { continuation in
+            lock.lock()
+            if terminated { lock.unlock(); continuation.resume() }
+            else { terminationWaiters.append(continuation); lock.unlock() }
+        }
+    }
+
+    func didTerminate() {
+        lock.lock()
+        terminated = true
+        let waiters = terminationWaiters
+        terminationWaiters.removeAll()
+        lock.unlock()
+        waiters.forEach { $0.resume() }
+    }
 
     var isCancelled: Bool {
         lock.lock(); defer { lock.unlock() }
@@ -165,7 +186,7 @@ final class ProcessControl: @unchecked Sendable {
         process = p
         let shouldKill = cancelled
         lock.unlock()
-        if shouldKill, p.isRunning { p.terminate() }
+        if shouldKill { cancelProcess(p) }
     }
 
     func pause() {
@@ -191,7 +212,16 @@ final class ProcessControl: @unchecked Sendable {
         lock.unlock()
         guard let p, p.isRunning else { return }
         if wasPaused { kill(p.processIdentifier, SIGCONT) }
-        p.terminate()
+        cancelProcess(p)
+    }
+
+    private func cancelProcess(_ process: Process) {
+        guard process.isRunning else { return }
+        process.terminate()
+        Task.detached {
+            try? await Task.sleep(for: .seconds(2))
+            if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+        }
     }
 }
 

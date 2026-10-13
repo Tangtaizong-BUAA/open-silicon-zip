@@ -564,3 +564,17 @@
 "Open Silicon Zip %@ is ready. Open Check for Updates to install it." = "Open Silicon Zip %@ 已發布，開啟「檢查更新」即可安裝。";
 
 "Update to %@…" = "更新至 %@…";
+
+"Allow this external request?" = "允許執行此外部請求？";
+"An external request includes a path outside the configured accessible folders." = "外部請求包含不在已設定可存取資料夾內的路徑。";
+"Choose a destination folder next." = "下一步請選擇目標資料夾。";
+"Choose the destination for these source files." = "請選擇這些來源檔案的輸出位置。";
+"Destination paths:" = "目標路徑：";
+"External request" = "外部請求";
+"Review every source and destination. Continue only if you requested this action." = "請檢查全部來源檔案和目標位置。僅當這是您要求的操作時繼續。";
+"Source paths:" = "來源檔案路徑：";
+"The archive listing exceeds the safe metadata or path-depth limit." = "壓縮檔列表超過安全中繼資料容量或路徑深度限制。";
+"The archive's combined sizes exceed the supported range." = "壓縮檔檔案大小總計超過支援的範圍。";
+"The original files will be deleted after successful completion." = "成功完成後將刪除原始檔案。";
+"The original files will be kept." = "將保留原始檔案。";
+"Imported. The engine path must be set locally in Advanced." = "已匯入。壓縮引擎路徑需在本機的進階設定中指定。";

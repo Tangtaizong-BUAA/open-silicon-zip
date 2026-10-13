@@ -564,3 +564,17 @@
 "Open Silicon Zip %@ is ready. Open Check for Updates to install it." = "Open Silicon Zip %@ is ready. Open Check for Updates to install it.";
 
 "Update to %@…" = "Update to %@…";
+
+"Allow this external request?" = "Allow this external request?";
+"An external request includes a path outside the configured accessible folders." = "An external request includes a path outside the configured accessible folders.";
+"Choose a destination folder next." = "Choose a destination folder next.";
+"Choose the destination for these source files." = "Choose the destination for these source files.";
+"Destination paths:" = "Destination paths:";
+"External request" = "External request";
+"Review every source and destination. Continue only if you requested this action." = "Review every source and destination. Continue only if you requested this action.";
+"Source paths:" = "Source paths:";
+"The archive listing exceeds the safe metadata or path-depth limit." = "The archive listing exceeds the safe metadata or path-depth limit.";
+"The archive's combined sizes exceed the supported range." = "The archive's combined sizes exceed the supported range.";
+"The original files will be deleted after successful completion." = "The original files will be deleted after successful completion.";
+"The original files will be kept." = "The original files will be kept.";
+"Imported. The engine path must be set locally in Advanced." = "Imported. The engine path must be set locally in Advanced.";

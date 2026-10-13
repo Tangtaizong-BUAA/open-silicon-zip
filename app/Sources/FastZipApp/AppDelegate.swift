@@ -62,6 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     func applicationWillTerminate(_ notification: Notification) {
         EngineProcesses.shutDown()
+        MainActor.assumeIsolated { AppModel.shared.cleanUpTemporaryFiles() }
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

@@ -17,9 +17,10 @@ final class QuickActionWindows {
     }
 
     func chooseCompression(paths: [String], app: AppModel) {
-        guard let first = paths.first else { return }
+        guard !paths.isEmpty else { return }
         let id = UUID()
-        let view = QuickCompressionView(destination: URL(fileURLWithPath: first).deletingLastPathComponent()) { [weak self, weak app] format, destination in
+        let view = QuickCompressionView(destination: ExternalRequestPolicy.commonSourceDirectory(paths)
+            ?? FileManager.default.homeDirectoryForCurrentUser) { [weak self, weak app] format, destination in
             self?.windows[id]?.close()
             if let format, let app {
                 app.quickCompress(paths: paths, format: format, deleteSources: false, each: false,
