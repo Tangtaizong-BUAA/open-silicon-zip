@@ -87,7 +87,7 @@ private struct GeneralTab: View {
     private func importFile() {
         Task { @MainActor in
             guard let url = await FilePanels.chooseFiles(allowFolders: false, message: L10n.t("Choose a settings file")).first else { return }
-            do { try app.importPreferences(from: url); message = L10n.t("Imported.") }
+            do { try app.importPreferences(from: url); message = L10n.t("Imported. The engine path must be set locally in Advanced.") }
             catch { message = error.localizedDescription }
         }
     }

@@ -51,6 +51,7 @@ pub fn map_err(e: sz::Error) -> Error { sz_err(e) }
 fn sz_err(e: sz::Error) -> Error {
     use sz::Error as E;
     let s = e.to_string();
+    if s.contains("resource budget") { return Error::new(ErrorKind::ResourceLimit, s); }
     match &e {
         E::PasswordRequired => Error::new(ErrorKind::PasswordRequired, s),
         E::MaybeBadPassword(_) => Error::new(ErrorKind::WrongPassword, s),
@@ -237,6 +238,7 @@ pub fn create_7z(out: &Path, entries: &[EntryDesc], o: &SevenOptions, cancel: &C
 
 /// Byte-split `src` into `out.001`, `out.002`, ... (the 7-Zip volume layout).
 pub fn split_file(src: &Path, out: &Path, size: u64) -> Result<Vec<PathBuf>> {
+    if size == 0 { return Err(Error::new(ErrorKind::InvalidSplitSize, "volume size must be positive")); }
     let mut f = File::open(src)?;
     let total = f.metadata()?.len();
     let mut names = Vec::new();
@@ -245,16 +247,24 @@ pub fn split_file(src: &Path, out: &Path, size: u64) -> Result<Vec<PathBuf>> {
     let mut left = total;
     loop {
         let p = PathBuf::from(format!("{}.{:03}", out.display(), idx));
-        let mut w = std::io::BufWriter::new(File::create(&p)?);
+        if std::fs::symlink_metadata(&p).is_ok() {
+            return Err(Error::new(ErrorKind::InvalidInput, format!("volume already exists: {}", p.display())));
+        }
+        let parent = p.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
+        let temporary = tempfile::Builder::new().prefix(".osz-split-").tempfile_in(parent)?;
+        let mut w = std::io::BufWriter::new(temporary.as_file());
         let mut vol = size.min(left);
         left -= vol;
         while vol > 0 {
             let want = (vol as usize).min(buf.len());
             let n = f.read(&mut buf[..want])?;
-            if n == 0 { break; }
+            if n == 0 { return Err(Error::new(ErrorKind::BrokenArchive, "split input truncated")); }
             w.write_all(&buf[..n])?; vol -= n as u64;
         }
         w.flush()?;
+        w.get_ref().sync_all()?;
+        drop(w);
+        temporary.persist_noclobber(&p).map_err(|e| Error::from(e.error))?;
         names.push(p);
         idx += 1;
         if left == 0 { break; }
@@ -267,7 +277,11 @@ pub fn join_volumes(first: &Path, tmp: &Path) -> Result<PathBuf> {
     let s = first.to_string_lossy();
     let base = s.rsplit_once('.').map(|x| x.0.to_string()).ok_or_else(|| Error::new(ErrorKind::InvalidInput, "not a volume"))?;
     let out = tmp.join(Path::new(&base).file_name().unwrap());
-    let mut w = std::io::BufWriter::new(File::create(&out)?);
+    if std::fs::symlink_metadata(&out).is_ok() {
+        return Err(Error::new(ErrorKind::InvalidInput, "joined output already exists"));
+    }
+    let temporary = tempfile::Builder::new().prefix(".osz-join-").tempfile_in(tmp)?;
+    let mut w = std::io::BufWriter::new(temporary.as_file());
     for i in 1..100000 {
         let p = PathBuf::from(format!("{base}.{i:03}"));
         if !p.exists() {
@@ -277,6 +291,9 @@ pub fn join_volumes(first: &Path, tmp: &Path) -> Result<PathBuf> {
         std::io::copy(&mut File::open(&p)?, &mut w)?;
     }
     w.flush()?;
+    w.get_ref().sync_all()?;
+    drop(w);
+    temporary.persist_noclobber(&out).map_err(|e| Error::from(e.error))?;
     Ok(out)
 }
 
@@ -338,12 +355,23 @@ pub fn extract_7z(path: &Path, o: &ExtractOptions, cancel: &CancelToken, progres
         let f = temporary.as_file();
         let mut w = std::io::BufWriter::with_capacity((archive.files[idx].size() as usize).clamp(8192, 256 << 10), f);
         let mut n = 0u64;
+        let mut crc = crc32fast::Hasher::new();
         loop {
             if cancel.is_cancelled() { return Err(sz::Error::Other(std::borrow::Cow::Borrowed("cancelled"))); }
             let k = rd.read(buf).map_err(|e| sz::Error::Io(e, "read".into()))?;
             if k == 0 { break; }
+            if k as u64 > archive.files[idx].size().saturating_sub(n) {
+                return Err(sz::Error::Other("7z entry exceeds declared size".into()));
+            }
             w.write_all(&buf[..k]).map_err(|e| sz::Error::Io(e, "write".into()))?;
+            crc.update(&buf[..k]);
             n += k as u64;
+        }
+        if n != archive.files[idx].size() {
+            return Err(sz::Error::Other("7z entry length mismatch".into()));
+        }
+        if archive.files[idx].has_crc && crc.finalize() as u64 != archive.files[idx].crc {
+            return Err(sz::Error::ChecksumVerificationFailed);
         }
         w.flush().map_err(|e| sz::Error::Io(e, "flush".into()))?;
         drop(w);

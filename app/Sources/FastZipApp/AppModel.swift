@@ -77,6 +77,7 @@ final class AppModel: ObservableObject {
     }
 
     private var pendingLinks: [DeepLink] = []
+    var approveExternalRequest: (ExternalRequestReview) -> Bool = ExternalRequestDialog.confirm
     private var dashboardRequested = false
     func requestDashboard() {
         if let openDashboardWindow { openDashboardWindow() }
@@ -99,13 +100,19 @@ final class AppModel: ObservableObject {
 
     private var postActions: [JobID: [PostAction]] = [:]
     private var wasBusy = false
+    private var temporaryFiles = try? TemporaryExtractionStore()
+    private var openedTemporaryFiles: [String: [URL]] = [:]
+    private var openFileGeneration: [String: UUID] = [:]
+    private var openFileTasks: [String: [UUID: Task<Void, Never>]] = [:]
     private static let recentsKey = "FastZip.recents"
 
-    init() {
-        let loaded = PreferencesStore().load()
+    init(engine suppliedEngine: EngineClient? = nil, preferences: Preferences? = nil, observe: Bool = true) {
+        let loaded = preferences ?? PreferencesStore().load()
         prefs = loaded
         let enginePath = loaded.advanced.enginePath.map { URL(fileURLWithPath: $0) } ?? ProcessEngineClient.locate()
-        if let enginePath {
+        if let suppliedEngine {
+            engine = suppliedEngine
+        } else if let enginePath {
             engine = ProcessEngineClient(executableURL: enginePath)
             engineAvailable = true
         } else {
@@ -115,8 +122,10 @@ final class AppModel: ObservableObject {
         queue = JobQueue(engine: engine, maxConcurrent: loaded.general.maxConcurrentJobs)
         presets = presetStore.all()
         recents = (UserDefaults.standard.stringArray(forKey: Self.recentsKey) ?? []).map { URL(fileURLWithPath: $0) }
-        startObserving()
-        syncFinderConfig()
+        if observe {
+            startObserving()
+            syncFinderConfig()
+        }
     }
 
     // MARK: Observation
@@ -298,6 +307,11 @@ final class AppModel: ObservableObject {
 
     func handle(_ link: DeepLink) {
         lastExternalRequest = Date()
+        do { try ExternalRequestPolicy.validate(link.paths, config: FinderConfig(from: prefs, presets: presets)) }
+        catch {
+            Task { await Dialogs.showError(error as? FZError ?? FZError(code: .unsafePath), context: L10n.t("External request")) }
+            return
+        }
         switch link {
         case .new, .compress, .extract:
             for window in NSApp.windows {
@@ -306,20 +320,27 @@ final class AppModel: ObservableObject {
             }
         default: break
         }
-        if case .open = link, openArchiveWindow == nil { pendingLinks.append(link); return }
-        let deletes: Bool
+        if case .open = link, openArchiveWindow == nil {
+            if pendingLinks.count < 32 { pendingLinks.append(link) }
+            return
+        }
+        // Compression is confirmed after resolving presets and the destination.
+        // All other external channels use the same gate, including inbox files.
+        let review: ExternalRequestReview?
         switch link {
-        case .extract(_, _, let value), .compress(_, _, let value, _, _, _): deletes = value
-        default: deletes = false
+        case .new, .compress: review = nil
+        case .extract(let paths, let mode, let deletes):
+            let destinations = mode == .ask || mode == .other ? [L10n.t("Choose a destination folder next.")]
+                : paths.map { URL(fileURLWithPath: $0).deletingLastPathComponent().path }
+            review = ExternalRequestReview(action: L10n.t("Extract"), paths: paths, destinations: destinations, deletesOriginals: deletes)
+        case .open(let paths):
+            review = ExternalRequestReview(action: L10n.t("Open"), paths: paths, destinations: [], deletesOriginals: false)
+        case .test(let paths):
+            review = ExternalRequestReview(action: L10n.t("Test"), paths: paths, destinations: [], deletesOriginals: false)
+        case .checksum(let paths):
+            review = ExternalRequestReview(action: L10n.t("Checksums"), paths: paths, destinations: [], deletesOriginals: false)
         }
-        if deletes {
-            let alert = NSAlert()
-            alert.messageText = L10n.t("Delete source files after completion?")
-            alert.informativeText = L10n.t("An external request asks to delete the originals. Continue only if you requested this action.")
-            alert.addButton(withTitle: L10n.t("Cancel"))
-            alert.addButton(withTitle: L10n.t("Continue"))
-            guard alert.runModal() == .alertSecondButtonReturn else { return }
-        }
+        if let review, !approveExternalRequest(review) { return }
         switch link {
         case .open(let paths):
             paths.forEach { openArchive(URL(fileURLWithPath: $0)) }
@@ -512,17 +533,53 @@ final class AppModel: ObservableObject {
     /// Extracts one entry into a private temp dir and returns its URL (preview, FR-010).
     /// Fire-and-forget: failures return nil; nothing is added to the job queue.
     func extractToTemp(archive: URL, entry: ArchiveEntry, password: String?, codepage: String?) async -> URL? {
-        let tmp = FileManager.default.temporaryDirectory
-            .appendingPathComponent("FastZip-Preview-\(UUID().uuidString)", isDirectory: true)
+        guard !Task.isCancelled, !entry.isSymlink, !entry.name.hasPrefix("/"), !entry.name.hasPrefix("\\"),
+              !entry.components.contains(".."), let temporaryFiles,
+              let tmp = try? temporaryFiles.createDirectory() else { return nil }
         let cmd = ExtractCommand(archive: archive.path, destination: tmp.path, password: password,
                                  codepage: codepage, entries: [entry.name], overwrite: .overwrite)
         let run = engine.start(.extract(cmd))
         do {
-            for try await _ in run.events {}
-        } catch { return nil }
+            try await withTaskCancellationHandler {
+                for try await event in run.events {
+                    try Task.checkCancellation()
+                    if case .done(false) = event { throw FZError(code: .brokenArchive) }
+                    if case .error(let code, let message) = event { throw FZError(code: code, message: message) }
+                }
+                try Task.checkCancellation()
+            } onCancel: { run.cancel() }
+            await run.waitForTermination()
+        } catch {
+            run.cancel()
+            await run.waitForTermination()
+            temporaryFiles.remove(tmp)
+            return nil
+        }
         let out = tmp.appendingPathComponent(entry.name)
         var isDir: ObjCBool = false
-        return FileManager.default.fileExists(atPath: out.path, isDirectory: &isDir) && !isDir.boolValue ? out : nil
+        guard !Task.isCancelled, out.resolvingSymlinksInPath().path.hasPrefix(tmp.path + "/"),
+              FileManager.default.fileExists(atPath: out.path, isDirectory: &isDir), !isDir.boolValue else {
+            temporaryFiles.remove(tmp)
+            return nil
+        }
+        return out
+    }
+
+    func releaseTemporaryFile(_ url: URL) { temporaryFiles?.removeFile(url) }
+
+    func releaseOpenFiles(for archive: URL) {
+        openFileGeneration[archive.path] = UUID()
+        if let tasks = openFileTasks.removeValue(forKey: archive.path) {
+            for task in tasks.values { task.cancel() }
+        }
+        for file in openedTemporaryFiles.removeValue(forKey: archive.path) ?? [] { releaseTemporaryFile(file) }
+    }
+
+    func cleanUpTemporaryFiles() {
+        for tasks in openFileTasks.values { for task in tasks.values { task.cancel() } }
+        openFileTasks.removeAll()
+        openedTemporaryFiles.removeAll()
+        temporaryFiles?.cleanUp()
     }
 
     /// Applies ZIP modifications through `fz edit` (FR-301..303). Throws on engine failure.
@@ -536,13 +593,15 @@ final class AppModel: ObservableObject {
     }
 
     func openInPlace(archive: URL, entry: ArchiveEntry, password: String?, codepage: String?) {
-        let tmp = FileManager.default.temporaryDirectory
-            .appendingPathComponent("FastZip-\(UUID().uuidString)", isDirectory: true)
-        Task {
-            let cmd = ExtractCommand(archive: archive.path, destination: tmp.path, password: password,
-                                     codepage: codepage, entries: [entry.name], overwrite: .overwrite)
-            let id = await self.queue.enqueue(.extract(cmd), title: entry.displayName)
-            self.registerPostActions([.openFile(tmp.appendingPathComponent(entry.name))], for: id)
+        let generation = openFileGeneration[archive.path] ?? UUID()
+        openFileGeneration[archive.path] = generation
+        let taskID = UUID()
+        openFileTasks[archive.path, default: [:]][taskID] = Task {
+            defer { self.openFileTasks[archive.path]?.removeValue(forKey: taskID) }
+            guard let file = await self.extractToTemp(archive: archive, entry: entry, password: password, codepage: codepage) else { return }
+            guard !Task.isCancelled, self.openFileGeneration[archive.path] == generation else { self.releaseTemporaryFile(file); return }
+            self.openedTemporaryFiles[archive.path, default: []].append(file)
+            NSWorkspace.shared.open(file)
         }
     }
 
@@ -631,14 +690,34 @@ final class AppModel: ObservableObject {
             settings = p.settings
             presetPasswordID = p.passwordItemID
         }
-        if deleteSources { settings.options.deleteSources = true }
+        settings = ExternalRequestPolicy.compressionSettings(settings, deleteSources: deleteSources)
         if each { settings.options.oneArchivePerItem = true }
         if let rule { settings.filenameRule = rule }
-        let base = inputs.count == 1 ? first.lastPathComponent : first.deletingLastPathComponent().lastPathComponent
-        let request = CreateRequest(inputs: inputs, settings: settings,
-                                    destination: destination ?? first.deletingLastPathComponent(), baseName: base, password: nil)
+        let configured = FinderConfig(from: prefs, presets: presets)
+        let resolvedSettings = settings
         Task {
-            var r = request
+            do { try ExternalRequestPolicy.validate(paths, config: configured) }
+            catch { await Dialogs.showError(error as? FZError ?? FZError(code: .unsafePath), context: L10n.t("External request")); return }
+            let outputDirectory: URL
+            if let chosen = destination ?? ExternalRequestPolicy.commonSourceDirectory(paths) {
+                outputDirectory = chosen
+            } else {
+                guard let chosen = await FilePanels.chooseFolder(prompt: L10n.t("Compress"), message: L10n.t("Choose the destination for these source files.")) else { return }
+                outputDirectory = chosen
+            }
+            let base = inputs.count == 1 ? first.lastPathComponent : outputDirectory.lastPathComponent
+            var r = CreateRequest(inputs: inputs, settings: resolvedSettings, destination: outputDirectory, baseName: base, password: nil)
+            let rule = r.settings.filenameRule.isEmpty ? "${NAME}" : r.settings.filenameRule
+            let names = r.settings.options.oneArchivePerItem ? inputs.map(\.lastPathComponent) : [base]
+            let outputs = names.map {
+                outputDirectory.appendingPathComponent(FilenameRule.ensureExtension(
+                    FilenameRule.expand(rule, name: $0), r.settings.format.fileExtension)).path
+            }
+            guard self.approveExternalRequest(ExternalRequestReview(action: L10n.t("Compress"), paths: paths,
+                destinations: outputs, deletesOriginals: r.settings.options.deleteSources)) else { return }
+            // Check the paths again after a potentially asynchronous folder picker.
+            do { try ExternalRequestPolicy.validate(paths, config: FinderConfig(from: self.prefs, presets: self.presets)) }
+            catch { await Dialogs.showError(error as? FZError ?? FZError(code: .unsafePath), context: L10n.t("External request")); return }
             if let id = presetPasswordID { r.password = (try? await self.passwordStore.item(id: id))?.secret }
             await self.create(r, compact: true)
         }

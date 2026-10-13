@@ -48,6 +48,7 @@ mod lzma2_c;
 mod encryption;
 mod error;
 mod reader;
+mod limits;
 
 #[cfg(feature = "compress")]
 mod writer;

@@ -83,15 +83,22 @@ pub struct ListItem { pub name: String, pub size: u64, pub csize: u64, pub mtime
 fn resolving<T>(path: &Path, f: impl FnOnce(&Path) -> Result<T>) -> Result<T> {
     let is_split = path.extension().and_then(|e| e.to_str()).map_or(false, |e| e.len() == 3 && e.chars().all(|c| c.is_ascii_digit()));
     if !is_split { return f(path); }
-    let tmp = std::env::temp_dir().join(format!("fz-join-{}", std::process::id()));
-    std::fs::create_dir_all(&tmp)?;
-    let r = (|| { let joined = sevenz::join_volumes(path, &tmp)?; f(&joined) })();
-    let _ = std::fs::remove_dir_all(&tmp);
-    r
+    let tmp = tempfile::Builder::new().prefix("fz-join-").tempdir()?;
+    let joined = sevenz::join_volumes(path, tmp.path())?;
+    f(&joined)
 }
 
 pub fn list(path: &Path, password: Option<&str>, codepage: Option<&str>, cancel: &CancelToken) -> Result<Vec<ListItem>> {
-    resolving(path, |path| list_inner(path, password, codepage, cancel))
+    resolving(path, |path| {
+        let items = list_inner(path, password, codepage, cancel)?;
+        let mut budget = crate::limits::ListingBudget::new(Default::default());
+        for item in &items {
+            cancel.check()?;
+            budget.reserve(item.name.len())?;
+            budget.reserve_json(&item.name)?;
+        }
+        Ok(items)
+    })
 }
 pub fn extract(path: &Path, o: &ExtractOptions, codepage: Option<&str>, cancel: &CancelToken, progress: &Progress) -> Result<ExtractReport> {
     // smart-extract names the wrapper after the original volume set, not the temp join

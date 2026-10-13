@@ -73,12 +73,11 @@ public final class RecoveryRunner: ObservableObject {
         p.standardError = FileHandle.nullDevice
         // Terminate the child when FastZip quits mid-run.
         p.qualityOfService = .userInitiated
-        do { try p.run() } catch {
+        do { try EngineProcesses.launch(p) } catch {
             state = .failed(message: error.localizedDescription)
             return
         }
         process = p
-        EngineProcesses.register(p)
         stdoutPipe = pipe
         state = .running
         stats = nil

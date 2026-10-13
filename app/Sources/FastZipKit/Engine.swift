@@ -252,15 +252,19 @@ public struct EngineRun: Sendable {
     public let pause: @Sendable () -> Void
     public let resume: @Sendable () -> Void
     public let cancel: @Sendable () -> Void
+    /// Completes after the child exits, even when the event consumer is cancelled.
+    public let waitForTermination: @Sendable () async -> Void
 
     public init(events: AsyncThrowingStream<EngineEvent, Error>,
                 pause: @escaping @Sendable () -> Void,
                 resume: @escaping @Sendable () -> Void,
-                cancel: @escaping @Sendable () -> Void) {
+                cancel: @escaping @Sendable () -> Void,
+                waitForTermination: @escaping @Sendable () async -> Void = {}) {
         self.events = events
         self.pause = pause
         self.resume = resume
         self.cancel = cancel
+        self.waitForTermination = waitForTermination
     }
 }
 
@@ -278,8 +282,18 @@ public extension EngineClient {
     func listEntries(archive: String, password: String? = nil, codepage: String? = nil) async throws -> [ArchiveEntry] {
         let run = start(.list(archive: archive, password: password, codepage: codepage))
         var result: [ArchiveEntry] = []
-        for try await event in run.events {
-            if case .entry(let e) = event { result.append(e) }
+        var budget = ArchiveListingBudget()
+        do {
+            for try await event in run.events {
+                try Task.checkCancellation()
+                if case .entry(let e) = event {
+                    try budget.admit(e)
+                    result.append(e)
+                }
+            }
+        } catch {
+            run.cancel()
+            throw error
         }
         return result
     }

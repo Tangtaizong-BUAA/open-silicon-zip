@@ -133,11 +133,18 @@ fn decompress_impl<R: Read + Seek>(
     src_reader.seek(SeekFrom::Start(pos))?;
     let mut seven = ArchiveReader::new(src_reader, password)?;
     let dest = PathBuf::from(dest.as_ref());
+    if std::fs::symlink_metadata(&dest).is_ok_and(|m| m.file_type().is_symlink()) {
+        return Err(Error::other("symlink extraction root"));
+    }
     if !dest.exists() {
         std::fs::create_dir_all(&dest)?;
     }
+    // Resolve user-selected aliases once (e.g. macOS /var -> /private/var).
+    // All entry components below this root are checked without following links.
+    let dest = std::fs::canonicalize(dest)?;
     seven.for_each_entries(|entry, reader| {
         let dest_path = safe_join(&dest, entry.name())?;
+        reject_symlink_components(&dest_path)?;
         extract_fn(entry, reader, &dest_path)
     })?;
 
@@ -156,6 +163,9 @@ fn safe_join(dest: &Path, entry_name: &str) -> Result<PathBuf, Error> {
     // Treat backslashes as separators too, so `..\..\x` from a Windows-authored
     // archive is caught when extracting on Unix.
     let normalized = entry_name.replace('\\', "/");
+    if normalized.as_bytes().get(1) == Some(&b':') || normalized.contains('\0') {
+        return Err(Error::other("unsafe archive entry name"));
+    }
     let mut result = dest.to_path_buf();
     for component in Path::new(&normalized).components() {
         match component {
@@ -171,12 +181,27 @@ fn safe_join(dest: &Path, entry_name: &str) -> Result<PathBuf, Error> {
     Ok(result)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+fn reject_symlink_components(path: &Path) -> Result<(), Error> {
+    let mut current = PathBuf::new();
+    for component in path.components() {
+        current.push(component);
+        match std::fs::symlink_metadata(&current) {
+            Ok(m) if m.file_type().is_symlink() => return Err(Error::other("symlink in extraction path")),
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e.into()),
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
 /// Default extraction function that handles standard file and directory extraction.
 ///
 /// # Security
 /// `dest` must already be a path you have validated as staying inside your destination
-/// directory. This function only rejects `..` components as a last line of defense;
-/// because it receives the already-joined path it cannot detect an absolute entry name
+/// directory. This function rejects `..` and symlink path components; Unix writes
+/// resolve ancestors through directory descriptors with `O_NOFOLLOW`. Because it
+/// receives the already-joined path it cannot detect an absolute entry name
 /// that discarded the destination root (`root.join("/etc/x")` == `/etc/x`), so do not
 /// build `dest` with `root.join(entry.name())`. Prefer the higher-level [`decompress`]
 /// helpers, which perform the full traversal check for you.
@@ -191,7 +216,7 @@ pub fn default_entry_extract_fn(
     reader: &mut dyn Read,
     dest: &PathBuf,
 ) -> Result<bool, Error> {
-    use std::{fs::File, io::BufWriter, path::Component};
+    use std::path::Component;
 
     // Reject any `..` component so a relative-traversal path can never reach a write.
     // (An absolute escape cannot be detected here, as the destination root is unknown.)
@@ -202,6 +227,15 @@ pub fn default_entry_extract_fn(
         )));
     }
 
+    #[cfg(unix)]
+    {
+        // Directory descriptors bind every component before opening the next;
+        // ancestor replacements cannot redirect a later pathname write.
+        return unix_extract(entry, reader, dest).map(|_| true).map_err(Error::from);
+    }
+    #[cfg(not(unix))]
+    {
+    reject_symlink_components(dest)?;
     if entry.is_directory() {
         let dir = dest;
         if !dir.exists() {
@@ -216,11 +250,16 @@ pub fn default_entry_extract_fn(
                 None
             }
         });
-        let file = File::create(path)
-            .map_err(|e| Error::file_open(e, path.to_string_lossy().to_string()))?;
+        reject_symlink_components(path)?;
+        let temporary = tempfile::NamedTempFile::new_in(path.parent().unwrap_or(Path::new(".")))?;
+        let file = temporary.as_file();
         if entry.size() > 0 {
-            let mut writer = BufWriter::new(file);
-            std::io::copy(reader, &mut writer)?;
+            use std::io::Write;
+            let mut writer = std::io::BufWriter::new(file);
+            if std::io::copy(reader, &mut writer)? != entry.size() {
+                return Err(std::io::Error::from(std::io::ErrorKind::UnexpectedEof).into());
+            }
+            writer.flush()?;
 
             let file = writer.get_mut();
             let file_times = FileTimes::new()
@@ -232,7 +271,90 @@ pub fn default_entry_extract_fn(
 
             let _ = file.set_times(file_times);
         }
+        temporary.persist(path).map_err(|e| Error::from(e.error))?;
     }
 
     Ok(true)
+    }
+}
+
+#[cfg(unix)]
+fn unix_extract(entry: &ArchiveEntry, reader: &mut dyn Read, dest: &Path) -> std::io::Result<()> {
+    use rustix::fs::{self, AtFlags, Mode, OFlags};
+    use std::{fs::File, io::{self, Write}, path::Component, sync::atomic::{AtomicU64, Ordering}};
+    let dir_flags = OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC;
+    let directory = if entry.is_directory() { dest } else { dest.parent().unwrap_or(Path::new(".")) };
+    let mut parent = File::from(fs::open(if directory.is_absolute() { "/" } else { "." }, dir_flags, Mode::empty())?);
+    for component in directory.components() {
+        let name = match component {
+            Component::Normal(name) => name,
+            Component::RootDir | Component::CurDir => continue,
+            _ => return Err(io::Error::new(io::ErrorKind::InvalidInput, "unsafe directory component")),
+        };
+        match fs::openat(&parent, name, dir_flags, Mode::empty()) {
+            Ok(fd) => parent = File::from(fd),
+            Err(rustix::io::Errno::NOENT) => {
+                match fs::mkdirat(&parent, name, Mode::from_bits_truncate(0o755)) {
+                    Ok(()) | Err(rustix::io::Errno::EXIST) => {},
+                    Err(e) => return Err(e.into()),
+                }
+                parent = File::from(fs::openat(&parent, name, dir_flags, Mode::empty())?);
+            },
+            Err(e) => return Err(e.into()),
+        }
+    }
+    if entry.is_directory() { return Ok(()); }
+    let leaf = dest.file_name().ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "missing output name"))?;
+
+    // The staging directory is private and exclusively created. Publication is
+    // relative to its descriptor and the already-bound destination parent.
+    // A hostile writable parent can cause a collision or rename the directory,
+    // but cannot make us follow a link or substitute the staged file.
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos();
+    let mut staging = None;
+    for _ in 0..64 {
+        let name = format!(".osz-7z-{}-{stamp}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed));
+        match fs::mkdirat(&parent, &name, Mode::from_bits_truncate(0o700)) {
+            Ok(()) => {
+                let dir = File::from(fs::openat(&parent, &name, dir_flags, Mode::empty())?);
+                staging = Some((name, dir));
+                break;
+            },
+            Err(rustix::io::Errno::EXIST) => {},
+            Err(e) => return Err(e.into()),
+        }
+    }
+    let (name, dir) = staging.ok_or_else(|| io::Error::new(io::ErrorKind::AlreadyExists, "cannot reserve extraction staging directory"))?;
+    let result = (|| -> io::Result<()> {
+        let fd = fs::openat(&dir, "entry", OFlags::WRONLY | OFlags::CREATE | OFlags::EXCL | OFlags::NOFOLLOW | OFlags::CLOEXEC, Mode::from_bits_truncate(0o600))?;
+        let mut file = File::from(fd);
+        let mut crc = crc32fast::Hasher::new();
+        let mut written = 0u64;
+        let mut buffer = [0u8; 64 << 10];
+        loop {
+            let n = reader.read(&mut buffer)?;
+            if n == 0 { break; }
+            if n as u64 > entry.size().saturating_sub(written) {
+                return Err(io::Error::new(io::ErrorKind::InvalidData, "entry exceeds declared size"));
+            }
+            file.write_all(&buffer[..n])?;
+            crc.update(&buffer[..n]);
+            written += n as u64;
+        }
+        if written != entry.size() { return Err(io::Error::from(io::ErrorKind::UnexpectedEof)); }
+        if entry.has_crc && crc.finalize() as u64 != entry.crc {
+            return Err(io::Error::other(Error::ChecksumVerificationFailed));
+        }
+        let times = FileTimes::new().set_accessed(entry.access_date().into()).set_modified(entry.last_modified_date().into());
+        #[cfg(target_os = "macos")]
+        let times = times.set_created(entry.creation_date().into());
+        let _ = file.set_times(times);
+        file.sync_all()?;
+        fs::renameat(&dir, "entry", &parent, leaf)?;
+        Ok(())
+    })();
+    let _ = fs::unlinkat(&dir, "entry", AtFlags::empty());
+    let _ = fs::unlinkat(&parent, &name, AtFlags::REMOVEDIR);
+    result
 }

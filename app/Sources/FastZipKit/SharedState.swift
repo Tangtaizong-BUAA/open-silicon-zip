@@ -52,14 +52,15 @@ public enum DeepLink: Equatable, Sendable {
     }
 
     public static func parse(_ url: URL) -> DeepLink? {
-        guard url.scheme == scheme,
+        guard url.absoluteString.utf8.count <= 1024 * 1024,
+              url.scheme == scheme,
               let c = URLComponents(url: url, resolvingAgainstBaseURL: false),
               let host = c.host, c.user == nil, c.password == nil, c.port == nil,
               c.fragment == nil, c.path.isEmpty else { return nil }
         let items = c.queryItems ?? []
         let paths = items.filter { $0.name == "path" }.compactMap(\.value)
         guard !paths.isEmpty, paths.count <= 1024,
-              paths.allSatisfy({ $0.hasPrefix("/") && !$0.contains("\0") && !$0.split(separator: "/").contains("..") }) else { return nil }
+              paths.allSatisfy({ $0.hasPrefix("/") && $0.utf8.count <= 4096 && !$0.contains("\0") && !$0.split(separator: "/").contains("..") }) else { return nil }
         func value(_ n: String) -> String? { items.first { $0.name == n }?.value }
         let flag: (String) -> Bool = { value($0) == "1" }
 
@@ -177,10 +178,14 @@ public struct FinderConfig: Codable, Sendable, Equatable {
 
     /// True when `path` is inside one of the user-authorised roots (05 section 8).
     public func isAuthorised(path: String, isExternalVolume: Bool = false) -> Bool {
-        if isExternalVolume && !enableOnExternalVolumes { return false }
+        guard path.hasPrefix("/"), !path.contains("\0"), !path.split(separator: "/").contains("..") else { return false }
+        let resolved = ExternalRequestPolicy.canonicalPath(path)
+        if (isExternalVolume || resolved.hasPrefix("/Volumes/")) && !enableOnExternalVolumes { return false }
         return accessibleFolders.contains { root in
-            let r = root.hasSuffix("/") ? root : root + "/"
-            return path == root || path.hasPrefix(r)
+            guard root.hasPrefix("/"), !root.contains("\0") else { return false }
+            let canonicalRoot = ExternalRequestPolicy.canonicalPath(root)
+            let prefix = canonicalRoot.hasSuffix("/") ? canonicalRoot : canonicalRoot + "/"
+            return resolved == canonicalRoot || resolved.hasPrefix(prefix)
         }
     }
 

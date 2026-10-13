@@ -197,6 +197,7 @@ pub fn extract(arc: &ZipArchive, o: &ExtractOptions, cancel: &CancelToken, progr
 
     // symlinks
     for j in jobs.iter().filter(|j| j.e.is_symlink) {
+        cancel.check()?;
         if j.e.size > 65536 { report.unsafe_refused.push(j.e.name.clone()); continue; }
         pathsafe::ensure_no_symlink(&dest, &j.path)?;
         let mut buf = Vec::new();
@@ -207,9 +208,38 @@ pub fn extract(arc: &ZipArchive, o: &ExtractOptions, cancel: &CancelToken, progr
             report.unsafe_refused.push(format!("{} -> {}", j.e.name, target));
             continue;
         }
-        let _ = fs::remove_file(&j.path);
         #[cfg(unix)]
-        if std::os::unix::fs::symlink(&target, &j.path).is_ok() { stats.lock().unwrap().0 += 1; }
+        {
+            let mut path = j.path.clone();
+            let mut replace = false;
+            if fs::symlink_metadata(&path).is_ok() {
+                let choice = match o.overwrite {
+                    Overwrite::Overwrite => ConflictChoice::Overwrite,
+                    Overwrite::Skip => ConflictChoice::Skip,
+                    Overwrite::Rename => ConflictChoice::Rename,
+                    Overwrite::Ask => o.on_conflict.as_ref().map(|f| f(&path, Some(j.e))).unwrap_or(ConflictChoice::Skip),
+                };
+                match choice {
+                    ConflictChoice::Skip => { stats.lock().unwrap().1 += 1; progress.file_done(); continue; }
+                    ConflictChoice::Rename => path = pathsafe::unique_name(&path),
+                    ConflictChoice::Overwrite => replace = true,
+                }
+            }
+            pathsafe::ensure_no_symlink(&dest, &path)?;
+            // Construct the link in a private sibling directory. A bad link
+            // target or failed publication must leave an existing leaf intact.
+            let staging = tempfile::Builder::new().prefix(".osz-link-").tempdir_in(path.parent().unwrap_or(&dest))?;
+            let link = staging.path().join("link");
+            let publication = std::os::unix::fs::symlink(&target, &link).and_then(|_| {
+                if replace { fs::rename(&link, &path) }
+                else { fs::hard_link(&link, &path) } // atomically fails if the leaf exists
+            });
+            match publication {
+                Ok(()) => { stats.lock().unwrap().0 += 1; }
+                Err(e) => { stats.lock().unwrap().3.push((j.e.name.clone(), e.to_string())); }
+            }
+            progress.file_done();
+        }
     }
 
     // metadata pass: permissions + timestamps, directories deepest-first

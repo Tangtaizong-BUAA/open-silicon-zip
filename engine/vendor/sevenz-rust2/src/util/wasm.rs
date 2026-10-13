@@ -23,6 +23,7 @@ pub fn decompress(src: Uint8Array, pwd: &str, f: &Function) -> Result<(), String
         .map_err(|e| e.to_string())?;
     let mut seven =
         ArchiveReader::new(src_reader, Password::from(pwd)).map_err(|e| e.to_string())?;
+    let mut budget = crate::limits::BufferedBudget::new(crate::limits::MAX_BUFFERED_BYTES);
     seven
         .for_each_entries(|entry, reader| {
             if !entry.is_directory() {
@@ -30,8 +31,7 @@ pub fn decompress(src: Uint8Array, pwd: &str, f: &Function) -> Result<(), String
                     sanitize_entry_name(entry.name()).map_err(|e| std::io::Error::other(e))?;
 
                 if entry.size() > 0 {
-                    let mut writer = Vec::new();
-                    std::io::copy(reader, &mut writer)?;
+                    let writer = budget.read(reader, entry.size())?;
                     let _ = f.call2(
                         &JsValue::NULL,
                         &JsValue::from(path),

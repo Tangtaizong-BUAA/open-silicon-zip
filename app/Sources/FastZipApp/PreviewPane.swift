@@ -19,6 +19,7 @@ struct PreviewPane: View {
     @State private var fileURL: URL?
     @State private var kind: PreviewKind?
     @State private var phase: Phase = .idle
+    @State private var loadID = UUID()
 
     private enum Phase: Equatable { case idle, loading, readyKind(Int), unsupported }
 
@@ -38,8 +39,8 @@ struct PreviewPane: View {
             }
         }
         .frame(maxWidth: .infinity, minHeight: 180, maxHeight: .infinity)
-        .task(id: entry?.name) { await load() }
-        .onDisappear { fileURL = nil }
+        .task(id: [archive.path, entry?.name ?? "", codepage, password ?? ""]) { await load() }
+        .onDisappear { loadID = UUID(); releasePreview() }
     }
 
     @ViewBuilder
@@ -85,28 +86,37 @@ struct PreviewPane: View {
     }
 
     private func load() async {
+        let currentLoad = UUID()
+        loadID = currentLoad
+        releasePreview()
         guard let entry, !entry.isDirectory, entry.size < 512 * 1024 * 1024 else {
             phase = entry == nil ? .idle : .unsupported
-            fileURL = nil
             return
         }
-        guard let kind = PreviewKind(entry: entry) else {
-            // Not previewable inline, but still extract once so Open/Reveal work.
+        let previewKind = PreviewKind(entry: entry)
+        guard previewKind != nil || PreviewKind.wantsExtract(entry) else {
             phase = .unsupported
-            fileURL = nil
-            if PreviewKind.wantsExtract(entry) {
-                fileURL = await app.extractToTemp(archive: archive, entry: entry, password: password, codepage: codepage)
-            }
             return
         }
         phase = .loading
         if let url = await app.extractToTemp(archive: archive, entry: entry, password: password, codepage: codepage) {
+            guard !Task.isCancelled, loadID == currentLoad else {
+                app.releaseTemporaryFile(url)
+                return
+            }
             fileURL = url
-            self.kind = kind.with(url: url)
-            phase = .readyKind(1)
-        } else {
+            self.kind = previewKind?.with(url: url)
+            phase = previewKind == nil ? .unsupported : .readyKind(1)
+        } else if loadID == currentLoad && !Task.isCancelled {
             phase = .unsupported
         }
+    }
+
+    private func releasePreview() {
+        // Drop PDF/media/image consumers before unlinking their plaintext files.
+        kind = nil
+        if let fileURL { app.releaseTemporaryFile(fileURL) }
+        fileURL = nil
     }
 }
 
