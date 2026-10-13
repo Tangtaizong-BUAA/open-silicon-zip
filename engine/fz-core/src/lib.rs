@@ -8,6 +8,7 @@ pub mod enumerate;
 pub mod error;
 pub mod formats;
 pub mod hash;
+mod limits;
 pub mod pathsafe;
 pub mod recover;
 pub mod smart;

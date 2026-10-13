@@ -578,3 +578,5 @@
 "The original files will be deleted after successful completion." = "成功完成后将删除原文件。";
 "The original files will be kept." = "将保留原文件。";
 "Imported. The engine path must be set locally in Advanced." = "已导入。压缩引擎路径需在本机的高级设置中指定。";
+"Archive safety limit reached" = "已达到压缩包安全限制";
+"The archive exceeds the safe listing or buffering budget. Use a smaller archive or fewer entries." = "压缩包超出安全列表或缓冲预算。请使用更小的压缩包或减少条目。";

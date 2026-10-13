@@ -137,4 +137,24 @@ final class SecurityBoundaryTests: XCTestCase {
         await run.waitForTermination()
         XCTAssertFalse(EngineProcesses.isBusy)
     }
+
+    func testProcessRejectsOversizedListingBeforeYieldingEntry() async throws {
+        let dir = try directory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let executable = dir.appendingPathComponent("fz")
+        let path = Array(repeating: "a", count: 65).joined(separator: "/")
+        let script = "#!/bin/sh\nprintf '%s\\n' '{\"event\":\"entry\",\"name\":\"\(path)\"}' '{\"event\":\"done\",\"ok\":true}'\n"
+        try script.write(to: executable, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: executable.path)
+        let run = ProcessEngineClient(executableURL: executable).start(.list(archive: "/synthetic", password: nil, codepage: nil))
+        do {
+            for try await event in run.events {
+                if case .entry = event { XCTFail("Producer admitted an unsafe entry") }
+            }
+            XCTFail("Listing should fail")
+        } catch let error as FZError {
+            XCTAssertEqual(error.code, .resourceLimit)
+        }
+        await run.waitForTermination()
+    }
 }

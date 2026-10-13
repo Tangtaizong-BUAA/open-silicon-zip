@@ -16,11 +16,24 @@ public enum ExternalRequestPolicy {
     /// reordering attacker-controlled inputs cannot change that folder.
     public static func commonSourceDirectory(_ paths: [String]) -> URL? {
         let parents = Set(paths.map {
-            URL(fileURLWithPath: $0).deletingLastPathComponent()
-                .resolvingSymlinksInPath().standardizedFileURL.path
+            canonicalPath(URL(fileURLWithPath: $0).deletingLastPathComponent().path)
         })
         guard parents.count == 1, let parent = parents.first else { return nil }
         return URL(fileURLWithPath: parent, isDirectory: true)
+    }
+
+    /// Foundation may leave all links unresolved when the final leaf does not
+    /// exist. Resolve the nearest existing ancestor before appending that suffix.
+    static func canonicalPath(_ path: String) -> String {
+        var ancestor = URL(fileURLWithPath: path).standardizedFileURL
+        var suffix: [String] = []
+        while !FileManager.default.fileExists(atPath: ancestor.path), ancestor.path != "/" {
+            suffix.append(ancestor.lastPathComponent)
+            ancestor.deleteLastPathComponent()
+        }
+        var result = ancestor.resolvingSymlinksInPath().standardizedFileURL
+        for component in suffix.reversed() { result.appendPathComponent(component) }
+        return result.path
     }
 
     public static func compressionSettings(_ settings: CreateSettings, deleteSources: Bool) -> CreateSettings {

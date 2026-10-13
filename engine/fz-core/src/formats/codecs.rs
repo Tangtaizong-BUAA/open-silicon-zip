@@ -230,6 +230,10 @@ pub fn decompressor<R: Read + Send + 'static>(codec: Codec, r: R, mem_limit: u64
 
 /// Map an I/O error raised by a decoder into the stable taxonomy.
 pub fn map_decode_err(e: io::Error) -> Error {
+    if let Some(inner) = e.get_ref().and_then(|e| e.downcast_ref::<Error>()) {
+        return Error::new(inner.kind, inner.detail.clone());
+    }
+    if e.to_string() == crate::cancel::CANCEL_MSG { return Error::new(ErrorKind::Cancelled, "cancelled"); }
     let s = e.to_string().to_lowercase();
     if s.contains("memory") { Error::new(ErrorKind::DictionaryTooLarge, e.to_string()) } else { Error::new(ErrorKind::BrokenArchive, e.to_string()) }
 }

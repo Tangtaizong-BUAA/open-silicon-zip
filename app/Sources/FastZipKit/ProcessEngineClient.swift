@@ -105,9 +105,14 @@ public final class ProcessEngineClient: EngineClient, @unchecked Sendable {
 
         var failure: FZError?
         var sawDone = false
+        var listingBudget = ArchiveListingBudget()
+        var listingRejected = false
 
         do {
             readLoop: for try await line in outPipe.fileHandleForReading.bytes.lines {
+                // Enforce admission on the producer as well as the consumer:
+                // AsyncThrowingStream must never queue an unbounded listing.
+                if listingRejected { continue }
                 let parsed: EngineEvent?
                 do {
                     parsed = try EventParser.parse(line: line)
@@ -116,6 +121,15 @@ public final class ProcessEngineClient: EngineClient, @unchecked Sendable {
                 }
                 guard let event = parsed else { continue }
                 switch event {
+                case .entry(let entry):
+                    do { try listingBudget.admit(entry) }
+                    catch {
+                        listingRejected = true
+                        failure = error as? FZError ?? ArchiveListingBudget.limitError()
+                        control.cancel()
+                        continue
+                    }
+                    continuation.yield(event)
                 case .error(let code, let message):
                     failure = FZError(code: code, message: message)
                     // Keep draining stdout: stopping here can deadlock a child whose pipe fills.
@@ -134,7 +148,9 @@ public final class ProcessEngineClient: EngineClient, @unchecked Sendable {
         for await s in exitStream { status = s }
         await errTask.value
 
-        if control.isCancelled {
+        if listingRejected, let failure {
+            continuation.finish(throwing: failure)
+        } else if control.isCancelled {
             continuation.finish(throwing: FZError(code: .cancelled, message: "Cancelled"))
         } else if let failure {
             continuation.finish(throwing: failure)

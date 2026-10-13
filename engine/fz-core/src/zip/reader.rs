@@ -193,6 +193,11 @@ impl ZipArchive {
         if cd_size > available || cd_size > crate::sys::default_memory_budget().min(256 << 20) {
             return Err(Error::new(ErrorKind::BrokenArchive, "central directory implausibly large"));
         }
+        let limits = crate::limits::ListingLimits::default();
+        if entries_total > limits.entries as u64 {
+            return Err(crate::limits::exceeded("ZIP entry count"));
+        }
+        let mut budget = crate::limits::ListingBudget::new(limits);
         let mut cd = vec![0u8; cd_size as usize];
         vols.read_exact(cd_disk, cd_off, &mut cd)?;
         let mut recs = Vec::new();
@@ -210,8 +215,19 @@ impl ZipArchive {
             let mut off = rd32(&cd, p + 42) as u64;
             let ver_made = rd16(&cd, p + 4);
             if p + 46 + nl + el + cl > cd.len() { return Err(Error::new(ErrorKind::BrokenArchive, "truncated central directory")); }
-            let raw_name = cd[p + 46..p + 46 + nl].to_vec();
+            // Inspect lengths before allocating RawRec, raw-name copies, or a
+            // Unicode-path copy. Do not trust EOCD's count: it may under-report.
+            let raw_slice = &cd[p + 46..p + 46 + nl];
             let extra = &cd[p + 46 + nl..p + 46 + nl + el];
+            let raw_crc = crc32fast::hash(raw_slice);
+            let unicode_bytes = extra_fields(extra).into_iter().filter(|(id, d)| {
+                *id == EXTRA_UNICODE_PATH && d.len() >= 5 && d[0] == 1 && rd32(d, 1) == raw_crc
+            }).map(|(_, d)| d.len() - 5).sum::<usize>();
+            if nl > limits.path_bytes || unicode_bytes > limits.path_bytes {
+                return Err(crate::limits::exceeded("ZIP path bytes"));
+            }
+            budget.reserve(nl + unicode_bytes)?;
+            let raw_name = cd[p + 46..p + 46 + nl].to_vec();
             let mut real_method = method;
             let mut enc = if flags & FLAG_ENCRYPTED != 0 { EncKind::ZipCrypto } else { EncKind::None };
             let mut ae2 = false;
@@ -233,7 +249,7 @@ impl ZipArchive {
                         real_method = rd16(d, 5);
                     }
                     EXTRA_UT if d.len() >= 5 && d[0] & 1 == 1 => { mtime = rd32(d, 1) as i64; }
-                    EXTRA_UNICODE_PATH if d.len() >= 5 && d[0] == 1 && rd32(d, 1) == crc32fast::hash(&raw_name) => { uni = Some(d[5..].to_vec()); }
+                    EXTRA_UNICODE_PATH if d.len() >= 5 && d[0] == 1 && rd32(d, 1) == raw_crc => { uni = Some(d[5..].to_vec()); }
                     _ => {}
                 }
             }
@@ -261,6 +277,7 @@ impl ZipArchive {
         let entries = recs.into_iter().map(|r| r.entry).collect();
         let mut a = ZipArchive { vols, entries, raw, comment, codepage_used: String::new(), spanned, opts: opts.clone(), cd, cd_ranges, cd_start: cd_off, base };
         a.decode_names(opts.codepage.as_deref());
+        for e in &a.entries { budget.reserve_json(&e.name)?; }
         Ok(a)
     }
 

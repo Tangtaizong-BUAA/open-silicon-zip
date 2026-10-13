@@ -6,9 +6,8 @@ use super::writer::{create_zip, ZipOptions};
 use crate::cancel::{CancelToken, Progress};
 use crate::enumerate::EntryDesc;
 use crate::error::{Error, ErrorKind, Result};
-use std::fs::File;
 use std::io::{BufWriter, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 #[derive(Default)]
 pub struct EditOp {
@@ -26,7 +25,7 @@ pub fn validate_new_name(n: &str) -> Result<()> {
 
 struct OutRec { rec: Vec<u8> }
 
-fn copy_entries(arc: &ZipArchive, keep: &[usize], renames: &std::collections::HashMap<usize, String>, w: &mut BufWriter<File>, pos: &mut u64,
+fn copy_entries<W: Write>(arc: &ZipArchive, keep: &[usize], renames: &std::collections::HashMap<usize, String>, w: &mut W, pos: &mut u64,
                 cd: &mut Vec<OutRec>, cancel: &CancelToken) -> Result<()> {
     // extent end of each entry = next local offset (or start of the central directory)
     let mut offs: Vec<u64> = arc.entries.iter().map(|e| e.local_off).collect();
@@ -98,6 +97,9 @@ fn copy_entries(arc: &ZipArchive, keep: &[usize], renames: &std::collections::Ha
 }
 
 pub fn edit_zip(path: &Path, op: &EditOp, add_opts: &ZipOptions, cancel: &CancelToken, progress: &Progress) -> Result<()> {
+    if std::fs::symlink_metadata(path)?.file_type().is_symlink() {
+        return Err(Error::new(ErrorKind::UnsafePath, "refusing to edit a symlink"));
+    }
     let arc = ZipArchive::open(path, ReadOptions::default())?;
     if arc.spanned { return Err(Error::new(ErrorKind::UnsupportedFormat, "split archives are read-only; join or recreate them")); }
     if arc.base != 0 { return Err(Error::new(ErrorKind::UnsupportedFormat, "archives with a self-extractor stub are read-only")); }
@@ -116,14 +118,16 @@ pub fn edit_zip(path: &Path, op: &EditOp, add_opts: &ZipOptions, cancel: &Cancel
     for a in &op.add { let n = a.name.trim_end_matches('/'); for (i, e) in arc.entries.iter().enumerate() { if e.name.trim_end_matches('/') == n && !renames.contains_key(&i) { delete.insert(i); } } }
     let keep: Vec<usize> = (0..arc.entries.len()).filter(|i| !delete.contains(i)).collect();
 
-    let tmp_add: Option<PathBuf> = if op.add.is_empty() { None } else {
-        let t = PathBuf::from(format!("{}.add.part", path.display()));
+    let parent = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
+    let staging = tempfile::Builder::new().prefix(".osz-edit-").tempdir_in(parent)?;
+    let tmp_add = if op.add.is_empty() { None } else {
+        let t = staging.path().join("add.zip");
         create_zip(&t, &op.add, add_opts, cancel, progress)?;
         Some(t)
     };
-    let out_tmp = PathBuf::from(format!("{}.edit.part", path.display()));
-    let r = (|| -> Result<()> {
-        let mut w = BufWriter::with_capacity(1 << 20, File::create(&out_tmp)?);
+    let out_tmp = tempfile::NamedTempFile::new_in(staging.path())?;
+    {
+        let mut w = BufWriter::with_capacity(1 << 20, out_tmp.as_file());
         let mut pos = 0u64;
         let mut cd: Vec<OutRec> = Vec::new();
         copy_entries(&arc, &keep, &renames, &mut w, &mut pos, &mut cd, cancel)?;
@@ -151,11 +155,15 @@ pub fn edit_zip(path: &Path, op: &EditOp, add_opts: &ZipOptions, cancel: &Cancel
         w.write_all(&e.0)?;
         w.flush()?;
         w.get_ref().sync_all()?;
-        Ok(())
-    })();
-    if let Some(t) = &tmp_add { let _ = std::fs::remove_file(t); }
-    match r {
-        Ok(()) => { std::fs::rename(&out_tmp, path)?; Ok(()) }
-        Err(e) => { let _ = std::fs::remove_file(&out_tmp); Err(e) }
     }
+    cancel.check()?;
+    // Validate the rebuilt directory before replacing the original. Untouched
+    // payloads (including encrypted/unsupported methods) were copied verbatim.
+    let checked = ZipArchive::open(out_tmp.path(), ReadOptions::default())?;
+    if checked.entries.len() != keep.len() + op.add.len() {
+        return Err(Error::new(ErrorKind::BrokenArchive, "edited directory count mismatch"));
+    }
+    drop(checked);
+    out_tmp.persist(path).map_err(|e| Error::from(e.error))?;
+    Ok(())
 }

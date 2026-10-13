@@ -578,3 +578,5 @@
 "The original files will be deleted after successful completion." = "The original files will be deleted after successful completion.";
 "The original files will be kept." = "The original files will be kept.";
 "Imported. The engine path must be set locally in Advanced." = "Imported. The engine path must be set locally in Advanced.";
+"Archive safety limit reached" = "Archive safety limit reached";
+"The archive exceeds the safe listing or buffering budget. Use a smaller archive or fewer entries." = "The archive exceeds the safe listing or buffering budget. Use a smaller archive or fewer entries.";

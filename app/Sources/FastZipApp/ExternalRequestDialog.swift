@@ -35,6 +35,10 @@ enum ExternalRequestDialog {
         text.string = lines.joined(separator: "\n")
         text.textContainer?.widthTracksTextView = true
         text.isVerticallyResizable = true
+        text.minSize = NSSize(width: 0, height: scroll.bounds.height)
+        text.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        text.autoresizingMask = [.width]
+        text.textContainer?.containerSize = NSSize(width: scroll.bounds.width, height: CGFloat.greatestFiniteMagnitude)
         scroll.documentView = text
         alert.accessoryView = scroll
         alert.addButton(withTitle: L10n.t("Cancel"))

@@ -179,11 +179,11 @@ public struct FinderConfig: Codable, Sendable, Equatable {
     /// True when `path` is inside one of the user-authorised roots (05 section 8).
     public func isAuthorised(path: String, isExternalVolume: Bool = false) -> Bool {
         guard path.hasPrefix("/"), !path.contains("\0"), !path.split(separator: "/").contains("..") else { return false }
-        let resolved = URL(fileURLWithPath: path).resolvingSymlinksInPath().standardizedFileURL.path
+        let resolved = ExternalRequestPolicy.canonicalPath(path)
         if (isExternalVolume || resolved.hasPrefix("/Volumes/")) && !enableOnExternalVolumes { return false }
         return accessibleFolders.contains { root in
             guard root.hasPrefix("/"), !root.contains("\0") else { return false }
-            let canonicalRoot = URL(fileURLWithPath: root).resolvingSymlinksInPath().standardizedFileURL.path
+            let canonicalRoot = ExternalRequestPolicy.canonicalPath(root)
             let prefix = canonicalRoot.hasSuffix("/") ? canonicalRoot : canonicalRoot + "/"
             return resolved == canonicalRoot || resolved.hasPrefix(prefix)
         }

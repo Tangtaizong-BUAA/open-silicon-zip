@@ -578,3 +578,5 @@
 "The original files will be deleted after successful completion." = "成功完成後將刪除原始檔案。";
 "The original files will be kept." = "將保留原始檔案。";
 "Imported. The engine path must be set locally in Advanced." = "已匯入。壓縮引擎路徑需在本機的進階設定中指定。";
+"Archive safety limit reached" = "已達到壓縮檔安全限制";
+"The archive exceeds the safe listing or buffering budget. Use a smaller archive or fewer entries." = "壓縮檔超出安全清單或緩衝預算。請使用更小的壓縮檔或減少項目。";

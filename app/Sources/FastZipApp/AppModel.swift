@@ -103,6 +103,7 @@ final class AppModel: ObservableObject {
     private var temporaryFiles = try? TemporaryExtractionStore()
     private var openedTemporaryFiles: [String: [URL]] = [:]
     private var openFileGeneration: [String: UUID] = [:]
+    private var openFileTasks: [String: [UUID: Task<Void, Never>]] = [:]
     private static let recentsKey = "FastZip.recents"
 
     init(engine suppliedEngine: EngineClient? = nil, preferences: Preferences? = nil, observe: Bool = true) {
@@ -568,10 +569,15 @@ final class AppModel: ObservableObject {
 
     func releaseOpenFiles(for archive: URL) {
         openFileGeneration[archive.path] = UUID()
+        if let tasks = openFileTasks.removeValue(forKey: archive.path) {
+            for task in tasks.values { task.cancel() }
+        }
         for file in openedTemporaryFiles.removeValue(forKey: archive.path) ?? [] { releaseTemporaryFile(file) }
     }
 
     func cleanUpTemporaryFiles() {
+        for tasks in openFileTasks.values { for task in tasks.values { task.cancel() } }
+        openFileTasks.removeAll()
         openedTemporaryFiles.removeAll()
         temporaryFiles?.cleanUp()
     }
@@ -589,9 +595,11 @@ final class AppModel: ObservableObject {
     func openInPlace(archive: URL, entry: ArchiveEntry, password: String?, codepage: String?) {
         let generation = openFileGeneration[archive.path] ?? UUID()
         openFileGeneration[archive.path] = generation
-        Task {
+        let taskID = UUID()
+        openFileTasks[archive.path, default: [:]][taskID] = Task {
+            defer { self.openFileTasks[archive.path]?.removeValue(forKey: taskID) }
             guard let file = await self.extractToTemp(archive: archive, entry: entry, password: password, codepage: codepage) else { return }
-            guard self.openFileGeneration[archive.path] == generation else { self.releaseTemporaryFile(file); return }
+            guard !Task.isCancelled, self.openFileGeneration[archive.path] == generation else { self.releaseTemporaryFile(file); return }
             self.openedTemporaryFiles[archive.path, default: []].append(file)
             NSWorkspace.shared.open(file)
         }

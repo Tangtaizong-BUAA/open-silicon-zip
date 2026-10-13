@@ -891,7 +891,9 @@ dependencies = [
  "lzma-rust2",
  "lzma-sys",
  "ppmd-rust",
+ "rustix",
  "sha2",
+ "tempfile",
  "wasm-bindgen",
  "zstd",
 ]

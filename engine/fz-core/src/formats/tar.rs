@@ -160,17 +160,73 @@ fn header_checksum_ok(b: &[u8; 512]) -> bool {
 }
 
 pub fn list_tar(path: &Path, mem: u64, cancel: &CancelToken) -> Result<Vec<TarInfo>> {
-    let mut a = open_tar(path, mem)?;
+    let mut limits = crate::limits::ListingLimits::default();
+    limits.tar_decoded = limits.tar_decoded.min(mem.saturating_mul(4));
+    list_tar_with_limits(path, mem, cancel, limits)
+}
+
+/// Limit both the whole decoded stream and the metadata preceding each yielded
+/// entry. tar::Archive consumes GNU/PAX metadata internally before returning an
+/// Entry; an outer entry-count check alone cannot stop a huge long-name buffer.
+struct ListingRead<'a, R> {
+    inner: R,
+    cancel: &'a CancelToken,
+    left: u64,
+    phase_left: &'a std::cell::Cell<u64>,
+    started: std::time::Instant,
+    elapsed: std::time::Duration,
+}
+
+impl<R: Read> Read for ListingRead<'_, R> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        if buf.is_empty() { return Ok(0); }
+        if self.cancel.is_cancelled() { return Err(crate::cancel::io_cancelled()); }
+        if self.started.elapsed() >= self.elapsed {
+            return Err(std::io::Error::other(crate::limits::exceeded("TAR listing time")));
+        }
+        if self.left == 0 { return Err(std::io::Error::other(crate::limits::exceeded("TAR decoded bytes"))); }
+        if self.phase_left.get() == 0 { return Err(std::io::Error::other(crate::limits::exceeded("TAR extension metadata"))); }
+        let take = (buf.len() as u64).min(256 << 10).min(self.left).min(self.phase_left.get()) as usize;
+        let n = self.inner.read(&mut buf[..take])?;
+        self.left -= n as u64;
+        self.phase_left.set(self.phase_left.get() - n as u64);
+        Ok(n)
+    }
+}
+
+fn list_tar_with_limits(path: &Path, mem: u64, cancel: &CancelToken, limits: crate::limits::ListingLimits) -> Result<Vec<TarInfo>> {
+    cancel.check()?;
+    let codec = sniff_codec(path)?;
+    let reader = codecs::decompressor(codec, BufReader::with_capacity(1 << 20, File::open(path)?), mem)?;
+    let phase_left = std::cell::Cell::new(limits.tar_metadata);
+    let reader = ListingRead { inner: reader, cancel, left: limits.tar_decoded, phase_left: &phase_left,
+        started: std::time::Instant::now(), elapsed: limits.elapsed };
+    let mut a = tar::Archive::new(reader);
+    let mut budget = crate::limits::ListingBudget::new(limits);
     let mut v = Vec::new();
     for e in a.entries().map_err(codecs::map_decode_err)? {
         cancel.check()?;
         let e = e.map_err(codecs::map_decode_err)?;
         let h = e.header();
         let t = h.entry_type();
+        // The next iterator step first skips this payload and its alignment,
+        // then may read at most 64 KiB of GNU/PAX/sparse extension metadata.
+        // Sparse files' logical sizes do not grant extra metadata allowance.
+        let physical_size = if t.is_gnu_sparse() { h.entry_size().map_err(codecs::map_decode_err)? } else { e.size() };
+        let aligned = physical_size.checked_add(511).map(|n| n & !511)
+            .ok_or_else(|| crate::limits::exceeded("TAR size overflow"))?;
+        phase_left.set(aligned.checked_add(limits.tar_metadata).ok_or_else(|| crate::limits::exceeded("TAR size overflow"))?);
+        let name = e.path_bytes();
+        let link = e.link_name_bytes();
+        budget.reserve(name.len() + link.as_ref().map_or(0, |l| l.len()))?;
+        let name = String::from_utf8_lossy(&name).into_owned();
+        let link = link.map(|l| String::from_utf8_lossy(&l).into_owned());
+        budget.reserve_json(&name)?;
+        if let Some(link) = &link { limits.check_path(link)?; }
         v.push(TarInfo {
-            name: e.path().map_err(codecs::map_decode_err)?.to_string_lossy().into_owned(), size: h.size().unwrap_or(0), mtime: h.mtime().unwrap_or(0) as i64,
+            name, size: e.size(), mtime: h.mtime().unwrap_or(0) as i64,
             mode: h.mode().unwrap_or(0o644), is_dir: t.is_dir(), is_symlink: t.is_symlink() || t.is_hard_link(),
-            link: e.link_name().ok().flatten().map(|l| l.to_string_lossy().into_owned()),
+            link,
         });
     }
     Ok(v)

@@ -27,7 +27,7 @@ public struct ArchiveListingBudget: Sendable {
     }
 
     static func limitError() -> FZError {
-        FZError(code: .brokenArchive, message: L10n.t("The archive listing exceeds the safe metadata or path-depth limit."))
+        FZError(code: .resourceLimit, message: L10n.t("The archive listing exceeds the safe metadata or path-depth limit."))
     }
 
     static func adding(_ lhs: UInt64, _ rhs: UInt64) throws -> UInt64 {

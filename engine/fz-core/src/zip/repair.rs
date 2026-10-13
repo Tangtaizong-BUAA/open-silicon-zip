@@ -75,17 +75,22 @@ fn probe_deflate(f: &File, at: u64, limit: u64, sink: Option<&mut Vec<u8>>) -> (
 }
 
 pub fn repair_zip(input: &Path, output: &Path, cancel: &CancelToken) -> Result<RepairReport> {
+    if std::fs::symlink_metadata(output).is_ok() {
+        return Err(Error::new(ErrorKind::InvalidInput, "repair output already exists"));
+    }
     let f = File::open(input)?;
     let len = f.metadata()?.len();
     let mut rep = RepairReport { strategy: "central-directory rebuild", ..Default::default() };
-    let mut w = BufWriter::with_capacity(1 << 20, File::create(output)?);
+    let parent = output.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
+    let temporary = tempfile::Builder::new().prefix(".osz-repair-").tempfile_in(parent)?;
+    let mut w = BufWriter::with_capacity(1 << 20, temporary.as_file());
     let mut cd = Vec::new();
     let mut pos_out = 0u64;
     let mut at = 0u64;
     let mut count = 0u64;
     let mut buf = vec![0u8; 1 << 20];
     let sigs = [SIG_LOCAL.to_le_bytes(), SIG_CENTRAL.to_le_bytes()];
-    let copy = |w: &mut BufWriter<File>, mut from: u64, mut n: u64, buf: &mut Vec<u8>| -> Result<()> {
+    let copy = |w: &mut BufWriter<&File>, mut from: u64, mut n: u64, buf: &mut Vec<u8>| -> Result<()> {
         while n > 0 { let k = (n as usize).min(buf.len()); f.read_exact_at(&mut buf[..k], from)?; w.write_all(&buf[..k])?; from += k as u64; n -= k as u64; }
         Ok(())
     };
@@ -184,6 +189,9 @@ pub fn repair_zip(input: &Path, output: &Path, cancel: &CancelToken) -> Result<R
         Ok(())
     })();
     drop(w);
-    if let Err(e) = r { let _ = std::fs::remove_file(output); return Err(e); }
+    r?;
+    cancel.check()?;
+    super::reader::ZipArchive::open(temporary.path(), super::reader::ReadOptions::default())?;
+    temporary.persist_noclobber(output).map_err(|e| Error::from(e.error))?;
     Ok(rep)
 }

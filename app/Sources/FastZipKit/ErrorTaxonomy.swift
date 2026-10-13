@@ -15,6 +15,7 @@ public enum ErrorCode: String, Codable, Sendable, CaseIterable {
     case permissionDenied = "E_PERMISSION_DENIED"
     case locked = "E_LOCKED"
     case dictionaryTooLarge = "E_DICT_TOO_LARGE"
+    case resourceLimit = "E_RESOURCE_LIMIT"
     case fourGBLimit = "E_4GB_LIMIT"
     case invalidSplitSize = "E_INVALID_SPLIT_SIZE"
     case unsafePath = "E_UNSAFE_PATH"
@@ -42,7 +43,7 @@ public enum ErrorCode: String, Codable, Sendable, CaseIterable {
         case .missingVolume: return .volumeNeeded
         case .unsupportedFormat, .unsupportedMethod, .unsupportedEncryption: return .unsupported
         case .diskFull, .pathTooLong, .permissionDenied, .locked, .unsafePath, .io: return .environment
-        case .dictionaryTooLarge, .fourGBLimit, .invalidSplitSize, .invalidInput: return .limit
+        case .dictionaryTooLarge, .resourceLimit, .fourGBLimit, .invalidSplitSize, .invalidInput: return .limit
         case .cancelled: return .cancelled
         case .engineCrashed, .engineMissing, .unknown: return .internalFault
         }
@@ -63,6 +64,7 @@ public enum ErrorCode: String, Codable, Sendable, CaseIterable {
         case .permissionDenied: return L10n.t("Permission denied")
         case .locked: return L10n.t("File is in use")
         case .dictionaryTooLarge: return L10n.t("Not enough memory for this archive")
+        case .resourceLimit: return L10n.t("Archive safety limit reached")
         case .fourGBLimit: return L10n.t("Format size limit reached")
         case .invalidSplitSize: return L10n.t("Invalid volume size")
         case .unsafePath: return L10n.t("Unsafe path blocked")
@@ -103,6 +105,8 @@ public enum ErrorCode: String, Codable, Sendable, CaseIterable {
             return L10n.t("Another process is using this file. Close it and retry.")
         case .dictionaryTooLarge:
             return L10n.t("The archive needs more memory than the configured budget. Raise the limit in Preferences > Advanced or close other apps.")
+        case .resourceLimit:
+            return L10n.t("The archive exceeds the safe listing or buffering budget. Use a smaller archive or fewer entries.")
         case .fourGBLimit:
             return L10n.t("This format cannot hold that much data. Use 7Z, or split into volumes under 4 GB.")
         case .invalidSplitSize:
