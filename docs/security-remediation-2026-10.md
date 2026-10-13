@@ -34,6 +34,6 @@ The Rust details, limits and reproducible commands are in [the engine report](se
 
 ## Validation and release status
 
-Local Linux validation includes the Rust attack/roundtrip suite, a WASM build, and all three localization tables. macOS GitHub Actions runs the repository's unmodified release-feature Rust tests, Swift tests, security/localization regressions, compatibility suite and ARM64 app packaging. Consult PR checks for the final commit's results.
+Local Linux validation passed 177 Rust attack/roundtrip/library tests, all 24 existing security-regression checks, a WASM build, and 504 literal localization keys across all three language tables. The 13 new Rust attack regressions all failed against the unchanged baseline and all passed after the fix. macOS GitHub Actions runs the repository's unmodified release-feature Rust tests, Swift tests, security/localization regressions, compatibility suite and ARM64 app packaging. Consult PR checks for the final commit's results.
 
 This is a source fix. Existing installed apps remain unchanged until a fixed release is built and installed. The original repository-scan findings remain in Codex Security until the changes are merged and the scanner verifies the updated default branch.
